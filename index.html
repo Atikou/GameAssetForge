@@ -1,0 +1,996 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GameAssetForge 游戏常用工具</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <header class="app-topbar">
+      <a class="brand" href="#">
+        <span>
+          <strong>GameAssetForge</strong>
+          <small>游戏常用工具</small>
+        </span>
+      </a>
+      <button id="themeToggle" class="theme-toggle" type="button" aria-label="切换到亮色模式" title="切换主题">
+        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07l1.77-1.77M17.3 6.7l1.77-1.77"></path>
+        </svg>
+        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20.4 14.6A7.7 7.7 0 0 1 9.4 3.6a8.8 8.8 0 1 0 11 11z"></path>
+        </svg>
+      </button>
+    </header>
+
+    <main class="app-shell">
+      <aside class="tool-rail" aria-label="工具列表">
+        <div class="rail-heading">
+          <div>
+            <span>TOOLS</span>
+            <h1>选择工具</h1>
+          </div>
+          <button id="toolDrawerOpen" class="tool-drawer-open" type="button" aria-label="展开全部工具">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 5h16M4 12h16M4 19h16"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="tool-wheel">
+          <div class="wheel-window">
+            <nav class="tool-tabs wheel-track" aria-label="工具切换">
+              <button class="tab-button active" type="button" data-panel="chromaPanel">
+                <span class="tab-button-content">
+                  <span>抠背景</span>
+                  <small>图片透明 PNG</small>
+                </span>
+              </button>
+              <button class="tab-button" type="button" data-panel="resizePanel">
+                <span class="tab-button-content">
+                  <span>改尺寸</span>
+                  <small>宽高 / 比例 / 长边</small>
+                </span>
+              </button>
+              <button class="tab-button" type="button" data-panel="interpolatePanel">
+                <span class="tab-button-content">
+                  <span>图片插帧</span>
+                  <small>两帧生成中间帧</small>
+                </span>
+              </button>
+              <button class="tab-button" type="button" data-panel="videoPanel">
+                <span class="tab-button-content">
+                  <span>视频抽帧</span>
+                  <small>扣背景 / 帧动画 / 图集</small>
+                </span>
+              </button>
+              <button class="tab-button" type="button" data-panel="batchPanel">
+                <span class="tab-button-content">
+                  <span>批量队列</span>
+                  <small>多图处理 / 批量导出</small>
+                </span>
+              </button>
+              <button class="tab-button" type="button" data-panel="trimPanel">
+                <span class="tab-button-content">
+                  <span>裁透明边</span>
+                  <small>去空白 / offset 数据</small>
+                </span>
+              </button>
+              <button class="tab-button" type="button" data-panel="pixelScalePanel">
+                <span class="tab-button-content">
+                  <span>像素缩放</span>
+                  <small>最近邻 / 整数倍</small>
+                </span>
+              </button>
+              <button class="tab-button" type="button" data-panel="pixelEditorPanel">
+                <span class="tab-button-content">
+                  <span>像素编辑</span>
+                  <small>画笔 / 橡皮 / 网格</small>
+                </span>
+              </button>
+              <button class="tab-button" type="button" data-panel="sequencePanel">
+                <span class="tab-button-content">
+                  <span>序列重命名</span>
+                  <small>排序 / 补零 / 导出</small>
+                </span>
+              </button>
+              <button class="tab-button" type="button" data-panel="atlasSlicePanel">
+                <span class="tab-button-content">
+                  <span>图集切割</span>
+                  <small>自动网格 / 手动调整</small>
+                </span>
+              </button>
+            </nav>
+          </div>
+        </div>
+
+        <div class="rail-note">
+          <strong id="currentToolName">抠背景</strong>
+          <span id="currentToolDesc">处理绿幕、品红底、蓝底或自定义纯色背景。</span>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <section class="tool-overview active" id="toolOverview">
+          <div class="overview-card">
+            <div>
+              <span class="overview-kicker">当前工具</span>
+              <h2 id="overviewTitle">抠背景</h2>
+              <p id="overviewDesc">处理绿幕、品红底、蓝底或自定义纯色背景。</p>
+            </div>
+            <button id="enterToolButton" class="primary-button" type="button">进入工具</button>
+          </div>
+
+          <div class="overview-grid">
+            <article>
+              <span>用途</span>
+              <strong id="overviewUse">透明 PNG 处理</strong>
+              <p id="overviewUseDesc">用于快速扣除纯色背景，输出可直接进入引擎或图集流程的透明素材。</p>
+            </article>
+            <article>
+              <span>输入</span>
+              <strong id="overviewInput">图片文件</strong>
+              <p id="overviewInputDesc">选择本地 PNG、JPG、WebP 等浏览器可读取的图片。</p>
+            </article>
+            <article>
+              <span>输出</span>
+              <strong id="overviewOutput">PNG</strong>
+              <p id="overviewOutputDesc">保留透明通道，适合 UI、特效、道具图和序列帧资源。</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="tool-panel" id="chromaPanel">
+          <div class="panel-heading">
+            <div>
+              <h2>图片背景色透明化</h2>
+              <p>载入图片，选择需要扣掉的背景色，预览透明结果后导出 PNG。</p>
+            </div>
+            <div class="panel-actions">
+              <span class="panel-tag">透明 PNG</span>
+              <button class="back-to-overview" type="button">返回说明</button>
+            </div>
+          </div>
+
+          <div class="workflow-layout">
+            <div class="control-column">
+              <section class="step-card">
+                <div class="step-title">
+                  <span>1</span>
+                  <div>
+                    <h3>选择图片</h3>
+                    <p>支持绿幕、品红底、蓝底特效图或 UI 图。</p>
+                  </div>
+                </div>
+                <label class="file-button wide">
+                  <input id="chromaInput" type="file" accept="image/*" />
+                  选择图片
+                </label>
+              </section>
+
+              <section class="step-card">
+                <div class="step-title">
+                  <span>2</span>
+                  <div>
+                    <h3>设置背景色</h3>
+                    <p>可用预设色，也可以吸取原图中的背景像素。</p>
+                  </div>
+                </div>
+                <div class="field-grid">
+                  <label class="field">
+                    <span>背景色预设</span>
+                    <select id="keyPreset" aria-label="背景色预设">
+                      <option value="#00ff00">绿幕背景</option>
+                      <option value="#ff00ff">品红背景</option>
+                      <option value="#006bff">蓝色背景</option>
+                      <option value="custom">自定义颜色</option>
+                    </select>
+                  </label>
+                  <label class="field compact">
+                    <span>自定义颜色</span>
+                    <input id="customKeyColor" type="color" value="#00ff00" aria-label="自定义背景色" />
+                  </label>
+                  <button id="eyedropperButton" class="eyedropper-button" type="button">吸管取色</button>
+                </div>
+                <div class="range-grid">
+                  <label class="range-field">
+                    <span>容差 <b id="keyToleranceValue">72</b></span>
+                    <input id="keyTolerance" type="range" min="0" max="180" value="72" />
+                  </label>
+                  <label class="range-field">
+                    <span>柔边 <b id="softnessValue">18</b></span>
+                    <input id="softness" type="range" min="0" max="100" value="18" />
+                  </label>
+                </div>
+              </section>
+
+              <section class="step-card action-card">
+                <div class="step-title">
+                  <span>3</span>
+                  <div>
+                    <h3>导出结果</h3>
+                    <p>确认右侧透明预览后导出 PNG。</p>
+                  </div>
+                </div>
+                <button id="downloadChroma" class="primary-button wide" type="button" disabled>导出 PNG</button>
+              </section>
+            </div>
+
+            <div class="preview-column">
+              <div class="canvas-row">
+                <figure>
+                  <figcaption>原图</figcaption>
+                  <canvas id="chromaSourceCanvas"></canvas>
+                </figure>
+                <figure class="checkerboard">
+                  <figcaption>透明结果</figcaption>
+                  <canvas id="chromaResultCanvas"></canvas>
+                </figure>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel" id="resizePanel">
+          <div class="panel-heading">
+            <div>
+              <h2>图片分辨率调整</h2>
+              <p>先选缩放模式，再填写当前模式需要的参数，避免误填无效输入。</p>
+            </div>
+            <div class="panel-actions">
+              <span class="panel-tag">高清重采样</span>
+              <button class="back-to-overview" type="button">返回说明</button>
+            </div>
+          </div>
+
+          <div class="workflow-layout">
+            <div class="control-column">
+              <section class="step-card">
+                <div class="step-title">
+                  <span>1</span>
+                  <div>
+                    <h3>选择图片</h3>
+                    <p>载入后会自动读取原始宽高。</p>
+                  </div>
+                </div>
+                <label class="file-button wide">
+                  <input id="resizeInput" type="file" accept="image/*" />
+                  选择图片
+                </label>
+              </section>
+
+              <section class="step-card">
+                <div class="step-title">
+                  <span>2</span>
+                  <div>
+                    <h3>选择缩放方式</h3>
+                    <p>下方只显示当前方式需要填写的参数。</p>
+                  </div>
+                </div>
+                <label class="field">
+                  <span>缩放模式</span>
+                  <select id="resizeMode" aria-label="缩放模式">
+                    <option value="exact">指定宽高</option>
+                    <option value="scale">按比例缩放</option>
+                    <option value="maxSide">限制最长边</option>
+                  </select>
+                </label>
+
+                <div class="mode-fields" data-resize-group="exact">
+                  <label class="field">
+                    <span>目标宽度 px</span>
+                    <input id="resizeWidth" type="number" min="1" value="512" />
+                  </label>
+                  <label class="field">
+                    <span>目标高度 px</span>
+                    <input id="resizeHeight" type="number" min="1" value="512" />
+                  </label>
+                </div>
+
+                <div class="mode-fields" data-resize-group="scale">
+                  <label class="field">
+                    <span>缩放比例 %</span>
+                    <input id="resizeScale" type="number" min="1" value="50" />
+                  </label>
+                </div>
+
+                <div class="mode-fields" data-resize-group="maxSide">
+                  <label class="field">
+                    <span>最长边 px</span>
+                    <input id="resizeMaxSide" type="number" min="1" value="1024" />
+                  </label>
+                </div>
+              </section>
+
+              <section class="step-card action-card">
+                <div class="step-title">
+                  <span>3</span>
+                  <div>
+                    <h3>导出结果</h3>
+                    <p>右侧会显示实际输出分辨率。</p>
+                  </div>
+                </div>
+                <button id="downloadResize" class="primary-button wide" type="button" disabled>导出 PNG</button>
+              </section>
+            </div>
+
+            <div class="preview-column">
+              <div class="canvas-row">
+                <figure>
+                  <figcaption>原图</figcaption>
+                  <canvas id="resizeSourceCanvas"></canvas>
+                </figure>
+                <figure>
+                  <figcaption id="resizeResultLabel">处理结果</figcaption>
+                  <canvas id="resizeResultCanvas"></canvas>
+                </figure>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel" id="interpolatePanel">
+          <div class="panel-heading">
+            <div>
+              <h2>图片插帧</h2>
+              <p>输入前后两帧，生成中间过渡帧，适合低成本补足游戏特效、UI 动效和简单 sprite 序列。</p>
+            </div>
+            <div class="panel-actions">
+              <span class="panel-tag">轻量本地生成</span>
+              <button class="back-to-overview" type="button">返回说明</button>
+            </div>
+          </div>
+
+          <div class="workflow-layout">
+            <div class="control-column">
+              <section class="step-card">
+                <div class="step-title">
+                  <span>1</span>
+                  <div>
+                    <h3>选择前后两帧</h3>
+                    <p>两张图尺寸不一致时，会按第一帧尺寸生成。</p>
+                  </div>
+                </div>
+                <div class="field-grid">
+                  <label class="file-button wide">
+                    <input id="interpolateAInput" type="file" accept="image/*" />
+                    选择前一帧
+                  </label>
+                  <label class="file-button wide">
+                    <input id="interpolateBInput" type="file" accept="image/*" />
+                    选择后一帧
+                  </label>
+                </div>
+              </section>
+
+              <section class="step-card">
+                <div class="step-title">
+                  <span>2</span>
+                  <div>
+                    <h3>设置插帧位置</h3>
+                    <p>0.5 表示正中间，靠近 0 更接近前一帧，靠近 1 更接近后一帧。</p>
+                  </div>
+                </div>
+                <label class="range-field">
+                  <span>插帧位置 <b id="interpolateTValue">0.50</b></span>
+                  <input id="interpolateT" type="range" min="0" max="1" step="0.01" value="0.5" />
+                </label>
+                <label class="field">
+                  <span>生成方式</span>
+                  <select id="interpolateMode" aria-label="插帧生成方式">
+                    <option value="alphaBlend">透明安全混合</option>
+                    <option value="nearest">偏向更近帧</option>
+                  </select>
+                </label>
+              </section>
+
+              <section class="step-card action-card">
+                <div class="step-title">
+                  <span>3</span>
+                  <div>
+                    <h3>生成并导出</h3>
+                    <p>结果会保留透明通道，适合继续进入图集或序列帧流程。</p>
+                  </div>
+                </div>
+                <div class="action-row">
+                  <button id="generateInterpolate" class="primary-button" type="button" disabled>生成插帧</button>
+                  <button id="downloadInterpolate" type="button" disabled>导出 PNG</button>
+                </div>
+              </section>
+            </div>
+
+            <div class="preview-column">
+              <div class="triple-canvas-row">
+                <figure>
+                  <figcaption>前一帧</figcaption>
+                  <canvas id="interpolateACanvas"></canvas>
+                </figure>
+                <figure class="checkerboard">
+                  <figcaption>插帧结果</figcaption>
+                  <canvas id="interpolateResultCanvas"></canvas>
+                </figure>
+                <figure>
+                  <figcaption>后一帧</figcaption>
+                  <canvas id="interpolateBCanvas"></canvas>
+                </figure>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel" id="videoPanel">
+          <div class="panel-heading">
+            <div>
+              <h2>视频抽帧、扣背景与动画预览</h2>
+              <p>载入视频后抽帧，可选同步扣绿幕背景，并用帧动画预览检查导出节奏。</p>
+            </div>
+            <div class="panel-actions">
+              <span class="panel-tag">PNG 序列 / 图集</span>
+              <button class="back-to-overview" type="button">返回说明</button>
+            </div>
+          </div>
+
+          <div class="video-workspace">
+            <div class="control-column">
+              <section class="step-card">
+                <div class="step-title">
+                  <span>1</span>
+                  <div>
+                    <h3>选择视频</h3>
+                    <p>支持浏览器可解码的视频格式。</p>
+                  </div>
+                </div>
+                <label class="file-button wide">
+                  <input id="videoInput" type="file" accept="video/*" />
+                  选择视频
+                </label>
+              </section>
+
+              <section class="step-card">
+                <div class="step-title">
+                  <span>2</span>
+                  <div>
+                    <h3>抽帧设置</h3>
+                    <p>间隔越小，导出的帧越多，动画越流畅。</p>
+                  </div>
+                </div>
+                <label class="field">
+                  <span>抽帧间隔 秒</span>
+                  <input id="frameInterval" type="number" min="0.05" step="0.05" value="0.5" />
+                </label>
+                <div class="action-row">
+                  <button id="extractFrames" class="primary-button" type="button" disabled>批量抽帧</button>
+                  <button id="captureCurrent" type="button" disabled>截取当前帧</button>
+                  <button id="clearFrames" type="button" disabled>清空帧</button>
+                </div>
+              </section>
+
+              <section class="step-card">
+                <div class="step-title">
+                  <span>3</span>
+                  <div>
+                    <h3>可选：抽帧时扣背景</h3>
+                    <p>适合绿幕、品红底、蓝底特效视频，输出透明 PNG 序列。</p>
+                  </div>
+                </div>
+                <label class="toggle-inline">
+                  <input id="videoChromaEnabled" type="checkbox" />
+                  开启视频扣背景
+                </label>
+                <div class="video-chroma-fields">
+                  <div class="field-grid">
+                    <label class="field">
+                      <span>背景色预设</span>
+                      <select id="videoKeyPreset" aria-label="视频背景色预设">
+                        <option value="#00ff00">绿幕背景</option>
+                        <option value="#ff00ff">品红背景</option>
+                        <option value="#006bff">蓝色背景</option>
+                        <option value="custom">自定义颜色</option>
+                      </select>
+                    </label>
+                    <label class="field compact">
+                      <span>自定义颜色</span>
+                      <input id="videoKeyColor" type="color" value="#00ff00" aria-label="视频自定义背景色" />
+                    </label>
+                  </div>
+                  <div class="range-grid">
+                    <label class="range-field">
+                      <span>容差 <b id="videoKeyToleranceValue">72</b></span>
+                      <input id="videoKeyTolerance" type="range" min="0" max="180" value="72" />
+                    </label>
+                    <label class="range-field">
+                      <span>柔边 <b id="videoSoftnessValue">18</b></span>
+                      <input id="videoSoftness" type="range" min="0" max="100" value="18" />
+                    </label>
+                  </div>
+                </div>
+              </section>
+
+              <section class="step-card action-card">
+                <div class="step-title">
+                  <span>4</span>
+                  <div>
+                    <h3>导出</h3>
+                    <p>抽帧后可导出选中帧，或把所有帧打成图集。</p>
+                  </div>
+                </div>
+                <div class="action-row">
+                  <button id="downloadSelectedFrame" type="button" disabled>导出选中帧</button>
+                  <button id="downloadAtlas" class="primary-button" type="button" disabled>导出图集 + JSON</button>
+                </div>
+              </section>
+            </div>
+
+            <div class="video-preview-column">
+              <div class="video-preview">
+                <div class="preview-title">视频预览</div>
+                <video id="videoPreview" controls></video>
+              </div>
+              <div class="animation-preview">
+                <div class="animation-header">
+                  <strong>帧动画预览</strong>
+                  <span id="animationFrameLabel">0 / 0 帧</span>
+                </div>
+                <div class="animation-canvas-wrap checkerboard">
+                  <canvas id="animationCanvas"></canvas>
+                </div>
+                <div class="animation-controls">
+                  <label class="field mini">
+                    <span>FPS</span>
+                    <input id="animationFps" type="number" min="1" max="60" value="12" />
+                  </label>
+                  <button id="toggleAnimation" class="primary-button" type="button" disabled>播放</button>
+                  <button id="resetAnimation" type="button" disabled>回到首帧</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="frame-column">
+              <div class="frame-summary" id="frameSummary">还没有抽取帧。</div>
+              <div class="frame-grid" id="frameGrid" aria-label="已抽取的帧"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel" id="batchPanel">
+          <div class="panel-heading">
+            <div>
+              <h2>批量处理队列</h2>
+              <p>一次导入多张图片，按同一规则批量处理，适合 AI 批产素材后的统一清理。</p>
+            </div>
+            <div class="panel-actions">
+              <span class="panel-tag">批量 PNG</span>
+              <button class="back-to-overview" type="button">返回说明</button>
+            </div>
+          </div>
+
+          <div class="workflow-layout">
+            <div class="control-column">
+              <section class="step-card">
+                <div class="step-title">
+                  <span>1</span>
+                  <div>
+                    <h3>导入图片</h3>
+                    <p>支持多选 PNG、JPG、WebP，处理结果会列入右侧队列。</p>
+                  </div>
+                </div>
+                <label class="file-button wide">
+                  <input id="batchInput" type="file" accept="image/*" multiple />
+                  选择多张图片
+                </label>
+              </section>
+              <section class="step-card">
+                <div class="step-title">
+                  <span>2</span>
+                  <div>
+                    <h3>处理规则</h3>
+                    <p>当前先覆盖最常用的裁透明边和像素整数倍缩放。</p>
+                  </div>
+                </div>
+                <label class="field">
+                  <span>批量动作</span>
+                  <select id="batchOperation">
+                    <option value="trim">自动裁透明边</option>
+                    <option value="pixelScale">像素风整数倍放大</option>
+                  </select>
+                </label>
+                <div class="field-grid">
+                  <label class="field">
+                    <span>透明阈值</span>
+                    <input id="batchTrimAlpha" type="number" min="0" max="255" value="8" />
+                  </label>
+                  <label class="field">
+                    <span>像素倍数</span>
+                    <input id="batchScaleFactor" type="number" min="1" max="16" value="2" />
+                  </label>
+                </div>
+              </section>
+              <section class="step-card action-card">
+                <div class="action-row">
+                  <button id="processBatch" class="primary-button" type="button" disabled>处理队列</button>
+                  <button id="downloadBatchAll" type="button" disabled>逐张导出</button>
+                  <button id="clearBatch" type="button" disabled>清空</button>
+                </div>
+              </section>
+            </div>
+            <div class="preview-column">
+              <div class="frame-summary" id="batchSummary">还没有导入图片。</div>
+              <div class="asset-list" id="batchList"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel" id="trimPanel">
+          <div class="panel-heading">
+            <div>
+              <h2>自动裁透明边</h2>
+              <p>扫描 PNG alpha 通道，去掉四周透明空白，并输出裁剪 offset 数据。</p>
+            </div>
+            <div class="panel-actions">
+              <span class="panel-tag">Trim + Offset</span>
+              <button class="back-to-overview" type="button">返回说明</button>
+            </div>
+          </div>
+
+          <div class="workflow-layout">
+            <div class="control-column">
+              <section class="step-card">
+                <div class="step-title">
+                  <span>1</span>
+                  <div>
+                    <h3>选择透明 PNG</h3>
+                    <p>适合特效帧、道具图、UI 图标去空白。</p>
+                  </div>
+                </div>
+                <label class="file-button wide">
+                  <input id="trimInput" type="file" accept="image/*" />
+                  选择图片
+                </label>
+              </section>
+              <section class="step-card">
+                <div class="field-grid">
+                  <label class="field">
+                    <span>透明阈值</span>
+                    <input id="trimAlphaThreshold" type="number" min="0" max="255" value="8" />
+                  </label>
+                  <label class="field">
+                    <span>保留边距 px</span>
+                    <input id="trimPadding" type="number" min="0" max="256" value="0" />
+                  </label>
+                </div>
+              </section>
+              <section class="step-card action-card">
+                <pre class="metadata-box" id="trimMetadata">等待处理...</pre>
+                <div class="action-row">
+                  <button id="downloadTrim" class="primary-button" type="button" disabled>导出 PNG</button>
+                  <button id="downloadTrimJson" type="button" disabled>导出 JSON</button>
+                </div>
+              </section>
+            </div>
+            <div class="preview-column">
+              <div class="canvas-row">
+                <figure class="checkerboard">
+                  <figcaption>原图</figcaption>
+                  <canvas id="trimSourceCanvas"></canvas>
+                </figure>
+                <figure class="checkerboard">
+                  <figcaption>裁剪结果</figcaption>
+                  <canvas id="trimResultCanvas"></canvas>
+                </figure>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel" id="pixelScalePanel">
+          <div class="panel-heading">
+            <div>
+              <h2>像素风放大 / 缩小</h2>
+              <p>使用最近邻采样处理像素图，避免模糊边缘，适合 16x16、32x32、64x64 素材。</p>
+            </div>
+            <div class="panel-actions">
+              <span class="panel-tag">Nearest</span>
+              <button class="back-to-overview" type="button">返回说明</button>
+            </div>
+          </div>
+
+          <div class="workflow-layout">
+            <div class="control-column">
+              <section class="step-card">
+                <label class="file-button wide">
+                  <input id="pixelScaleInput" type="file" accept="image/*" />
+                  选择像素图
+                </label>
+                <div class="field-grid">
+                  <label class="field">
+                    <span>缩放倍数</span>
+                    <input id="pixelScaleFactor" type="number" min="0.25" max="16" step="0.25" value="2" />
+                  </label>
+                  <label class="toggle-inline">
+                    <input id="pixelScaleGrid" type="checkbox" checked />
+                    显示网格
+                  </label>
+                </div>
+              </section>
+              <section class="step-card action-card">
+                <button id="downloadPixelScale" class="primary-button wide" type="button" disabled>导出 PNG</button>
+              </section>
+            </div>
+            <div class="preview-column">
+              <div class="canvas-row">
+                <figure class="pixel-preview">
+                  <figcaption>原图</figcaption>
+                  <canvas id="pixelScaleSourceCanvas"></canvas>
+                </figure>
+                <figure class="pixel-preview">
+                  <figcaption id="pixelScaleResultLabel">缩放结果</figcaption>
+                  <canvas id="pixelScaleResultCanvas"></canvas>
+                </figure>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel" id="pixelEditorPanel">
+          <div class="panel-heading">
+            <div>
+              <h2>像素图片编辑</h2>
+              <p>轻量像素画编辑器，支持新建、导入、画笔、橡皮、取色和透明背景导出。</p>
+            </div>
+            <div class="panel-actions">
+              <span class="panel-tag">Pixel Editor</span>
+              <button class="back-to-overview" type="button">返回说明</button>
+            </div>
+          </div>
+
+          <div class="workflow-layout">
+            <div class="control-column">
+              <section class="step-card">
+                <div class="field-grid">
+                  <label class="field">
+                    <span>画布宽</span>
+                    <input id="editorWidth" type="number" min="4" max="128" value="32" />
+                  </label>
+                  <label class="field">
+                    <span>画布高</span>
+                    <input id="editorHeight" type="number" min="4" max="128" value="32" />
+                  </label>
+                </div>
+                <div class="action-row">
+                  <button id="createPixelCanvas" class="primary-button" type="button">新建画布</button>
+                  <label class="file-button">
+                    <input id="editorImportInput" type="file" accept="image/*" />
+                    导入图片
+                  </label>
+                </div>
+              </section>
+              <section class="step-card">
+                <div class="field-grid">
+                  <label class="field">
+                    <span>工具</span>
+                    <select id="editorTool">
+                      <option value="pen">画笔</option>
+                      <option value="eraser">橡皮</option>
+                      <option value="picker">取色</option>
+                    </select>
+                  </label>
+                  <label class="field compact">
+                    <span>颜色</span>
+                    <input id="editorColor" type="color" value="#38bdf8" />
+                  </label>
+                </div>
+                <label class="field">
+                  <span>笔刷尺寸</span>
+                  <input id="editorBrushSize" type="number" min="1" max="8" value="1" />
+                </label>
+              </section>
+              <section class="step-card action-card">
+                <div class="action-row">
+                  <button id="clearPixelCanvas" type="button">清空</button>
+                  <button id="downloadPixelEditor" class="primary-button" type="button">导出 PNG</button>
+                </div>
+              </section>
+            </div>
+            <div class="preview-column">
+              <div class="editor-stage">
+                <div class="pixel-editor-canvas-frame" id="pixelEditorFrame">
+                  <canvas id="pixelEditorCanvas"></canvas>
+                  <div id="editorGridOverlay" aria-hidden="true"></div>
+                </div>
+                <div id="editorBrushPreview" aria-hidden="true"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel" id="sequencePanel">
+          <div class="panel-heading">
+            <div>
+              <h2>序列帧重命名 / 排序</h2>
+              <p>批量整理帧图文件名，按自然数字排序、反序或手动参数生成统一命名。</p>
+            </div>
+            <div class="panel-actions">
+              <span class="panel-tag">Sequence</span>
+              <button class="back-to-overview" type="button">返回说明</button>
+            </div>
+          </div>
+
+          <div class="workflow-layout">
+            <div class="control-column">
+              <section class="step-card">
+                <label class="file-button wide">
+                  <input id="sequenceInput" type="file" accept="image/*" multiple />
+                  选择序列帧
+                </label>
+                <label class="field">
+                  <span>排序方式</span>
+                  <select id="sequenceSort">
+                    <option value="natural">自然排序</option>
+                    <option value="name">文件名排序</option>
+                    <option value="reverse">反向自然排序</option>
+                  </select>
+                </label>
+                <div class="field-grid">
+                  <label class="field">
+                    <span>前缀</span>
+                    <input id="sequencePrefix" type="text" value="frame" />
+                  </label>
+                  <label class="field">
+                    <span>起始编号</span>
+                    <input id="sequenceStart" type="number" min="0" value="1" />
+                  </label>
+                  <label class="field">
+                    <span>补零位数</span>
+                    <input id="sequencePadding" type="number" min="1" max="8" value="4" />
+                  </label>
+                </div>
+              </section>
+              <section class="step-card action-card">
+                <div class="action-row">
+                  <button id="applySequenceRename" class="primary-button" type="button" disabled>生成命名</button>
+                  <button id="downloadSequenceAll" type="button" disabled>逐张导出</button>
+                  <button id="downloadSequenceManifest" type="button" disabled>导出清单</button>
+                </div>
+              </section>
+            </div>
+            <div class="preview-column">
+              <div class="frame-summary" id="sequenceSummary">还没有导入序列帧。</div>
+              <div class="asset-list" id="sequenceList"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel" id="atlasSlicePanel">
+          <div class="panel-heading">
+            <div>
+              <h2>未知图集切割</h2>
+              <p>导入已有 sprite sheet，自动识别切片后，可选中框线拖动调整并删除不需要的切片。</p>
+            </div>
+            <div class="panel-actions">
+              <span class="panel-tag">Atlas Slice</span>
+              <button class="back-to-overview" type="button">返回说明</button>
+            </div>
+          </div>
+
+          <div class="workflow-layout">
+            <div class="control-column">
+              <section class="step-card">
+                <label class="file-button wide">
+                  <input id="atlasSliceInput" type="file" accept="image/*" />
+                  选择图集
+                </label>
+                <div class="field-grid">
+                  <label class="field">
+                    <span>自动模式</span>
+                    <select id="atlasAutoMode">
+                      <option value="auto">自动判断</option>
+                      <option value="alpha">透明背景</option>
+                      <option value="solid">纯色背景</option>
+                      <option value="grid">规则网格</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>导出前缀</span>
+                    <input id="sliceNamePrefix" type="text" value="slice" />
+                  </label>
+                  <label class="field">
+                    <span>识别容差</span>
+                    <input id="atlasAutoThreshold" type="number" min="0" max="255" value="16" />
+                  </label>
+                  <label class="field">
+                    <span>最小面积</span>
+                    <input id="atlasAutoMinArea" type="number" min="1" value="8" />
+                  </label>
+                  <label class="field">
+                    <span>外扩边距</span>
+                    <input id="atlasAutoPadding" type="number" min="0" value="0" />
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label class="field">
+                    <span>列数</span>
+                    <input id="sliceColumns" type="number" min="1" value="4" />
+                  </label>
+                  <label class="field">
+                    <span>行数</span>
+                    <input id="sliceRows" type="number" min="1" value="4" />
+                  </label>
+                  <label class="field">
+                    <span>单元宽</span>
+                    <input id="sliceCellWidth" type="number" min="1" value="32" />
+                  </label>
+                  <label class="field">
+                    <span>单元高</span>
+                    <input id="sliceCellHeight" type="number" min="1" value="32" />
+                  </label>
+                  <label class="field">
+                    <span>边距 X</span>
+                    <input id="sliceMarginX" type="number" min="0" value="0" />
+                  </label>
+                  <label class="field">
+                    <span>边距 Y</span>
+                    <input id="sliceMarginY" type="number" min="0" value="0" />
+                  </label>
+                  <label class="field">
+                    <span>间隔 X</span>
+                    <input id="sliceGapX" type="number" min="0" value="0" />
+                  </label>
+                  <label class="field">
+                    <span>间隔 Y</span>
+                    <input id="sliceGapY" type="number" min="0" value="0" />
+                  </label>
+                </div>
+              </section>
+              <section class="step-card action-card">
+                <div class="action-row">
+                  <button id="autoDetectSlice" type="button" disabled>自动识别切片</button>
+                  <button id="applyAtlasSlice" class="primary-button" type="button" disabled>更新切割</button>
+                  <button id="downloadAtlasSlices" type="button" disabled>逐张导出</button>
+                  <button id="downloadAtlasSliceManifest" type="button" disabled>导出清单</button>
+                </div>
+              </section>
+            </div>
+            <div class="preview-column">
+              <figure class="atlas-preview">
+                <figcaption id="atlasSliceLabel">图集预览</figcaption>
+                <div class="atlas-canvas-wrap">
+                  <canvas id="atlasSliceCanvas" tabindex="0" aria-label="图集切片调整画布"></canvas>
+                </div>
+              </figure>
+              <div class="asset-list compact-list" id="atlasSliceList"></div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div id="toolDrawer" class="tool-drawer" aria-hidden="true">
+      <button class="tool-drawer-backdrop" type="button" data-tool-drawer-close aria-label="关闭全部工具"></button>
+      <aside class="tool-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="toolDrawerTitle">
+        <header class="tool-drawer-header">
+          <div>
+            <span>TOOLS</span>
+            <h2 id="toolDrawerTitle">工具分组</h2>
+          </div>
+          <button id="toolDrawerClose" class="tool-drawer-close" type="button" aria-label="关闭全部工具">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18"></path>
+            </svg>
+          </button>
+        </header>
+        <div id="toolDrawerList" class="tool-drawer-list"></div>
+      </aside>
+    </div>
+
+    <template id="frameTemplate">
+      <button class="frame-tile" type="button">
+        <img alt="" />
+        <span></span>
+      </button>
+    </template>
+
+    <script src="src/app.js"></script>
+  </body>
+</html>

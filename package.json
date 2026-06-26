@@ -1,0 +1,30 @@
+{
+  "name": "game-asset-forge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local game asset utility kit with browser UI and HTTP APIs for chroma key cleanup, video frame capture, atlas export, and image resizing.",
+  "scripts": {
+    "serve": "node scripts/serve-open.js",
+    "api": "node server/index.js",
+    "mcp": "node mcp/server.js",
+    "start": "node server/index.js",
+    "check": "node scripts/smoke-check.js"
+  },
+  "keywords": [
+    "game-dev",
+    "asset-tools",
+    "sprite",
+    "atlas",
+    "chroma-key"
+  ],
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "express": "^4.19.2",
+    "ffmpeg-static": "^5.2.0",
+    "jszip": "^3.10.1",
+    "multer": "^2.0.0",
+    "sharp": "^0.33.5",
+    "zod": "^3.25.76"
+  }
+}
