@@ -22,7 +22,312 @@ function createServer() {
   });
 
   registerTools(server);
+  registerExtendedTools(server);
   return server;
+}
+
+function registerExtendedTools(server) {
+  server.registerTool(
+    "convert_image",
+    {
+      title: "图片格式转换",
+      description: "把图片转为 PNG、WebP、JPG 或 AVIF，可设置质量和最长边。",
+      inputSchema: {
+        imagePath: z.string(),
+        outputPath: z.string().optional(),
+        outputDir: z.string().optional(),
+        format: z.enum(["png", "webp", "jpeg", "avif"]).default("webp"),
+        quality: z.number().min(1).max(100).default(82),
+        maxSide: z.number().min(0).max(16384).default(0),
+        background: z.string().default("#000000"),
+      },
+    },
+    async (args) =>
+      callSingleImageTool("/api/image/convert", args, `converted.${args.format === "jpeg" ? "jpg" : args.format}`, {
+        format: args.format,
+        quality: args.quality,
+        maxSide: args.maxSide,
+        background: args.background,
+      }),
+  );
+
+  server.registerTool(
+    "pack_atlas_enhanced",
+    {
+      title: "增强图集打包",
+      description: "打包 sprite 图集，支持 padding、extrude、裁透明边、2 的幂尺寸和引擎 manifest。",
+      inputSchema: {
+        framePaths: z.array(z.string()).min(1),
+        outputPath: z.string().optional(),
+        outputDir: z.string().optional(),
+        padding: z.number().min(0).max(256).default(2),
+        extrude: z.number().min(0).max(32).default(1),
+        maxSize: z.number().min(64).max(16384).default(2048),
+        trim: z.boolean().default(true),
+        powerOfTwo: z.boolean().default(false),
+        engine: z.enum(["generic", "unity", "godot", "cocos", "pixi"]).default("generic"),
+      },
+    },
+    async (args) => {
+      const outDir = await ensureOutputDir(args.outputDir);
+      const outputPath = args.outputPath || path.join(outDir, "packed-atlas.zip");
+      return callZipTool(
+        "/api/atlas/pack",
+        {
+          padding: args.padding,
+          extrude: args.extrude,
+          maxSize: args.maxSize,
+          trim: args.trim,
+          powerOfTwo: args.powerOfTwo,
+          engine: args.engine,
+        },
+        args.framePaths.map((filePath) => ({ field: "frames", path: filePath })),
+        outputPath,
+      );
+    },
+  );
+
+  server.registerTool(
+    "sprite_fx_image",
+    {
+      title: "Sprite 增强处理",
+      description: "透明边缘修复、描边、投影、调色、调色板压色、法线图或遮罩图。",
+      inputSchema: {
+        imagePath: z.string(),
+        outputPath: z.string().optional(),
+        outputDir: z.string().optional(),
+        operation: z.enum(["edge", "outline", "shadow", "palette", "color", "normal", "mask"]).default("edge"),
+        color: z.string().default("#ffffff"),
+        strength: z.number().min(0).max(64).default(2),
+        colors: z.number().min(2).max(256).default(32),
+        brightness: z.number().min(0).max(5).default(1),
+        saturation: z.number().min(0).max(5).default(1),
+        hue: z.number().min(-360).max(360).default(0),
+      },
+    },
+    async (args) => {
+      const endpoint =
+        args.operation === "edge"
+          ? "/api/image/edge-fix"
+          : args.operation === "normal"
+            ? "/api/image/normal-map"
+            : args.operation === "mask"
+              ? "/api/image/mask-map"
+              : "/api/image/stylize";
+      return callSingleImageTool(endpoint, args, `${args.operation}.png`, {
+        operation: args.operation,
+        color: args.color,
+        thickness: args.strength,
+        strength: args.strength,
+        iterations: args.strength,
+        colors: args.colors,
+        brightness: args.brightness,
+        saturation: args.saturation,
+        hue: args.hue,
+      });
+    },
+  );
+
+  server.registerTool(
+    "export_sequence_animation",
+    {
+      title: "序列帧导出动图",
+      description: "把序列帧导出 GIF、WebP 或 MP4。",
+      inputSchema: {
+        framePaths: z.array(z.string()).min(1),
+        outputPath: z.string().optional(),
+        outputDir: z.string().optional(),
+        fps: z.number().min(1).max(60).default(12),
+        format: z.enum(["gif", "webp", "mp4"]).default("gif"),
+      },
+    },
+    async (args) => {
+      const outDir = await ensureOutputDir(args.outputDir);
+      const outputPath = args.outputPath || path.join(outDir, `animation.${args.format}`);
+      const result = await callApiMultipart(
+        "/api/sequence/animation",
+        { fps: args.fps, format: args.format },
+        args.framePaths.map((filePath) => ({ field: "frames", path: filePath })),
+      );
+      return textResult({ ok: true, outputPath: await writeBuffer(result.buffer, outputPath), contentType: result.contentType });
+    },
+  );
+
+  server.registerTool(
+    "nine_slice_image",
+    {
+      title: "九宫格切片",
+      description: "导出九宫格切片 ZIP 和 nine-slice.json。",
+      inputSchema: {
+        imagePath: z.string(),
+        outputPath: z.string().optional(),
+        outputDir: z.string().optional(),
+        left: z.number().min(0).default(16),
+        right: z.number().min(0).default(16),
+        top: z.number().min(0).default(16),
+        bottom: z.number().min(0).default(16),
+      },
+    },
+    async (args) => {
+      const outDir = await ensureOutputDir(args.outputDir);
+      const outputPath = args.outputPath || path.join(outDir, "nine-slice.zip");
+      return callZipTool(
+        "/api/ui/nine-slice",
+        { left: args.left, right: args.right, top: args.top, bottom: args.bottom },
+        [{ field: "image", path: args.imagePath }],
+        outputPath,
+      );
+    },
+  );
+
+  server.registerTool(
+    "slice_tileset",
+    {
+      title: "Tileset 切片",
+      description: "按 tile 宽高切 tileset，可去重并导出 tileset.json。",
+      inputSchema: {
+        imagePath: z.string(),
+        outputPath: z.string().optional(),
+        outputDir: z.string().optional(),
+        tileWidth: z.number().min(1).default(16),
+        tileHeight: z.number().min(1).default(16),
+        marginX: z.number().min(0).default(0),
+        marginY: z.number().min(0).default(0),
+        gapX: z.number().min(0).default(0),
+        gapY: z.number().min(0).default(0),
+        dedupe: z.boolean().default(true),
+      },
+    },
+    async (args) => {
+      const outDir = await ensureOutputDir(args.outputDir);
+      const outputPath = args.outputPath || path.join(outDir, "tileset.zip");
+      return callZipTool(
+        "/api/tileset/slice",
+        {
+          tileWidth: args.tileWidth,
+          tileHeight: args.tileHeight,
+          marginX: args.marginX,
+          marginY: args.marginY,
+          gapX: args.gapX,
+          gapY: args.gapY,
+          dedupe: args.dedupe,
+        },
+        [{ field: "image", path: args.imagePath }],
+        outputPath,
+      );
+    },
+  );
+
+  server.registerTool(
+    "quality_report_images",
+    {
+      title: "素材质检报告",
+      description: "检查尺寸、透明通道、空白帧、2 的幂尺寸和大图风险。",
+      inputSchema: {
+        imagePaths: z.array(z.string()).min(1),
+      },
+    },
+    async (args) => {
+      const result = await callApiMultipart(
+        "/api/quality/report",
+        {},
+        args.imagePaths.map((filePath) => ({ field: "images", path: filePath })),
+      );
+      return textResult(JSON.parse(result.buffer.toString("utf8")));
+    },
+  );
+
+  server.registerTool(
+    "batch_color_adjust",
+    {
+      title: "批量调色",
+      description: "批量调整亮度、饱和度和色相，输出 ZIP。",
+      inputSchema: {
+        imagePaths: z.array(z.string()).min(1),
+        outputPath: z.string().optional(),
+        outputDir: z.string().optional(),
+        brightness: z.number().min(0).max(5).default(1),
+        saturation: z.number().min(0).max(5).default(1),
+        hue: z.number().min(-360).max(360).default(0),
+      },
+    },
+    async (args) => {
+      const outDir = await ensureOutputDir(args.outputDir);
+      const outputPath = args.outputPath || path.join(outDir, "batch-color.zip");
+      return callZipTool(
+        "/api/batch/color",
+        { brightness: args.brightness, saturation: args.saturation, hue: args.hue },
+        args.imagePaths.map((filePath) => ({ field: "images", path: filePath })),
+        outputPath,
+      );
+    },
+  );
+
+  server.registerTool(
+    "process_audio",
+    {
+      title: "音频转码与标准化",
+      description: "转码游戏音频，或做响度标准化。",
+      inputSchema: {
+        audioPath: z.string(),
+        outputPath: z.string().optional(),
+        outputDir: z.string().optional(),
+        operation: z.enum(["convert", "normalize"]).default("convert"),
+        format: z.enum(["ogg", "mp3", "wav", "m4a"]).default("ogg"),
+        bitrate: z.string().default("160k"),
+      },
+    },
+    async (args) => {
+      const outDir = await ensureOutputDir(args.outputDir);
+      const outputPath = args.outputPath || path.join(outDir, `audio.${args.format}`);
+      const result = await callApiMultipart(
+        "/api/audio/process",
+        { operation: args.operation, format: args.format, bitrate: args.bitrate },
+        [{ field: "audio", path: args.audioPath }],
+      );
+      return textResult({ ok: true, outputPath: await writeBuffer(result.buffer, outputPath), contentType: result.contentType });
+    },
+  );
+
+  server.registerTool(
+    "extract_unity_apk",
+    {
+      title: "Unity APK 工程还原 / 资源提取",
+      description: "导入 Unity Android APK，扫描 Unity 资源结构，导出原始资源 ZIP，或通过命令模板调用 AssetRipper、AssetStudio、UnityPy、Cpp2IL。",
+      inputSchema: {
+        apkPath: z.string(),
+        outputPath: z.string().optional(),
+        outputDir: z.string().optional(),
+        mode: z.enum(["project", "assets", "raw", "code"]).default("assets"),
+        runMode: z.enum(["quick", "expert"]).default("quick"),
+        tool: z.enum(["auto", "assetripper", "assetstudio", "unitypy", "cpp2il", "raw"]).default("auto"),
+        commandTemplate: z.string().optional(),
+        toolArgs: z.string().optional(),
+        assetTypes: z.string().default("texture,audio,mesh,text"),
+        includeRaw: z.boolean().default(true),
+        timeoutMs: z.number().min(10000).max(1800000).default(600000),
+      },
+    },
+    async (args) => {
+      const outDir = await ensureOutputDir(args.outputDir);
+      const outputPath = args.outputPath || path.join(outDir, "unity-apk-extract.zip");
+      return callZipTool(
+        "/api/unity/apk-extract",
+        {
+          mode: args.mode,
+          runMode: args.runMode,
+          tool: args.tool,
+          commandTemplate: args.commandTemplate,
+          toolArgs: args.toolArgs,
+          assetTypes: args.assetTypes,
+          includeRaw: args.includeRaw,
+          timeoutMs: args.timeoutMs,
+        },
+        [{ field: "apk", path: args.apkPath }],
+        outputPath,
+      );
+    },
+  );
 }
 
 function textResult(data) {
@@ -183,10 +488,15 @@ function registerTools(server) {
         imagePath: z.string().describe("输入图片的本地路径"),
         outputPath: z.string().optional().describe("输出 PNG 路径"),
         outputDir: z.string().optional().describe("未提供 outputPath 时使用的输出目录"),
-        preset: z.enum(["green", "magenta", "blue", "custom"]).default("green"),
+        preset: z.enum(["green", "magenta", "blue", "custom", "auto"]).default("green"),
         color: z.string().default("#00ff00"),
         tolerance: z.number().min(0).max(441).default(72),
         softness: z.number().min(0).max(441).default(18),
+        spill: z.number().min(0).max(100).default(85),
+        edgeCleanup: z.number().min(0).max(100).default(18),
+        matting: z.boolean().default(true),
+        mattingRadius: z.number().min(1).max(32).default(4),
+        mattingStrength: z.number().min(0).max(100).default(70),
       },
     },
     async (args) =>
@@ -195,6 +505,11 @@ function registerTools(server) {
         color: args.color,
         tolerance: args.tolerance,
         softness: args.softness,
+        spill: args.spill,
+        edgeCleanup: args.edgeCleanup,
+        matting: args.matting,
+        mattingRadius: args.mattingRadius,
+        mattingStrength: args.mattingStrength,
       }),
   );
 
@@ -537,10 +852,15 @@ function registerTools(server) {
         outputDir: z.string().optional(),
         interval: z.number().min(0.05).max(60).default(0.5),
         maxFrames: z.number().min(1).max(2000).default(240),
-        preset: z.enum(["green", "magenta", "blue", "custom"]).default("green"),
+        preset: z.enum(["green", "magenta", "blue", "custom", "auto"]).default("green"),
         color: z.string().default("#00ff00"),
         tolerance: z.number().min(0).max(441).default(72),
         softness: z.number().min(0).max(441).default(18),
+        spill: z.number().min(0).max(100).default(85),
+        edgeCleanup: z.number().min(0).max(100).default(18),
+        matting: z.boolean().default(true),
+        mattingRadius: z.number().min(1).max(32).default(4),
+        mattingStrength: z.number().min(0).max(100).default(70),
       },
     },
     async (args) => {
@@ -555,6 +875,11 @@ function registerTools(server) {
           color: args.color,
           tolerance: args.tolerance,
           softness: args.softness,
+          spill: args.spill,
+          edgeCleanup: args.edgeCleanup,
+          matting: args.matting,
+          mattingRadius: args.mattingRadius,
+          mattingStrength: args.mattingStrength,
         },
         [{ field: "video", path: args.videoPath }],
         outputPath,

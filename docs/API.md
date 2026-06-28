@@ -54,10 +54,15 @@ Content-Type: multipart/form-data
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- | --- |
 | `image` | File | 是 | 无 | 输入图片 |
-| `preset` | string | 否 | `green` | `green`、`magenta`、`blue`、`custom` |
+| `preset` | string | 否 | `green` | `green`、`magenta`、`blue`、`custom`、`auto`；`auto` 会从四角估计背景色 |
 | `color` | string | 否 | `#00ff00` | 自定义颜色 |
 | `tolerance` | number | 否 | `72` | 抠色容差，范围 `0-441` |
 | `softness` | number | 否 | `18` | 边缘柔化，范围 `0-441` |
+| `spill` | number | 否 | `85` | 去色边 / 去绿边强度，范围 `0-100` |
+| `edgeCleanup` | number | 否 | `18` | 半透明边缘清理强度，范围 `0-100` |
+| `matting` | boolean | 否 | `true` | 启用自动 trimap + guided matting 边缘精修 |
+| `mattingStrength` | number | 否 | `70` | Matting 精修强度，范围 `0-100` |
+| `mattingRadius` | number | 否 | `4` | Matting 引导滤波半径，范围 `1-32` |
 
 响应：PNG 图片。
 
@@ -303,6 +308,81 @@ Content-Type: multipart/form-data
 
 响应：ZIP，包含透明帧 PNG 和 `manifest.json`。
 
+## Unity APK 工程还原 / 资源提取
+
+```http
+GET /api/unity/toolchain
+```
+
+返回项目内置工具链检测结果，包括 `tools/external/` 下 AssetRipper、AssetStudio、Cpp2IL、UnityPy 的可用状态、候选程序名和环境变量名。
+
+```http
+POST /api/unity/apk-inspect
+Content-Type: multipart/form-data
+```
+
+只解析 APK/ZIP 结构，不调用任何外部工具。浏览器 UI 在选择 APK 后会立即调用该接口，并弹窗显示是否检测为 Unity APK、`assets/bin/Data`、AssetBundle、`global-metadata.dat`、`libunity.so`、`libil2cpp.so` 等关键结构数量。验证未通过时会禁用后续提取按钮。
+
+```http
+POST /api/unity/apk-extract
+Content-Type: multipart/form-data
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `apk` | File | 是 | 无 | Unity Android APK |
+| `mode` | string | 否 | `assets` | `project` 按引用还原工程、`assets` 只提取资源、`code` 做 IL2CPP 结构分析、`raw` 仅解包 Unity 原始结构 |
+| `runMode` | string | 否 | `quick` | `quick` 使用内置工具链预设参数；`expert` 允许覆盖命令模板或参数 |
+| `tool` | string | 否 | `auto` | `auto`、`assetripper`、`assetstudio`、`unitypy`、`cpp2il`、`raw` |
+| `includeRaw` | boolean | 否 | `true` | 是否把 APK 中识别到的 Unity 原始结构放入 ZIP 的 `apk-unity-data/` |
+| `assetTypes` | string | 否 | `texture,audio,mesh,text` | 传给命令模板的资源类型备注 |
+| `commandTemplate` | string | 否 | 无 | 专家模式命令模板；留空时优先使用 `tools/external/` 内置工具 |
+| `toolArgs` | string | 否 | 无 | 专家模式参数模板；有内置工具路径但要覆盖默认参数时使用 |
+| `timeoutMs` | number | 否 | `600000` | 外部工具超时时间 |
+
+响应：ZIP，包含 `manifest.json`、可选 `apk-unity-data/`、可选外部工具输出 `tool-output/`。
+
+进度模式推荐给浏览器 UI 使用：
+
+```http
+POST /api/unity/apk-extract/jobs
+GET /api/unity/apk-extract/jobs/{jobId}
+GET /api/unity/apk-extract/jobs/{jobId}/download
+```
+
+`POST /jobs` 使用同样的 multipart 参数，立即返回 `jobId`、`status`、`percent`、`message` 和 `downloadUrl`。轮询 `GET /jobs/{jobId}` 可查看执行阶段、百分比和最近日志；状态为 `done` 后再请求 `downloadUrl` 下载 ZIP。同步接口 `POST /api/unity/apk-extract` 继续保留，适合脚本或 MCP 直接等待结果。
+
+命令模板支持以下占位符：
+
+| 占位符 | 含义 |
+| --- | --- |
+| `{input}` / `{apk}` | 临时 APK 文件路径 |
+| `{inputDir}` | 已解包的 Unity 相关文件目录 |
+| `{dataDir}` | `{inputDir}/assets/bin/Data` |
+| `{output}` | 外部工具输出目录 |
+| `{mode}` | 当前模式 |
+| `{assetTypes}` | `assetTypes` 参数 |
+
+内置工具默认目录：
+
+| 工具 | 目录 | 主要文件 |
+| --- | --- | --- |
+| AssetRipper | `tools/external/assetripper/` | `AssetRipper.CLI.exe` |
+| AssetStudio | `tools/external/assetstudio/` | `AssetStudioModCLI.exe` |
+| Cpp2IL | `tools/external/cpp2il/` | `Cpp2IL.exe` |
+| UnityPy | `tools/external/unitypy/` | `.venv/Scripts/python.exe` + `export_unitypy.py` |
+
+示例：
+
+```bash
+curl -X POST http://127.0.0.1:5180/api/unity/apk-extract \
+  -F "apk=@game.apk" \
+  -F "mode=project" \
+  -F "tool=assetripper" \
+  -F "commandTemplate=\"C:\Tools\AssetRipper\AssetRipper.CLI.exe\" \"{input}\" \"{output}\"" \
+  --output unity-apk-extract.zip
+```
+
 ## 给 AI 调用的建议流程
 
 1. 先调用 `GET /api/health` 确认服务可用。
@@ -310,3 +390,24 @@ Content-Type: multipart/form-data
 3. 多图流水线使用 `/api/batch/process`，得到 ZIP 后读取 `manifest.json` 继续下一步。
 4. 序列帧先用 `/api/sequence/rename` 统一命名，再用 `/api/atlas` 合成图集。
 5. 未知图集优先用 `/api/atlas/auto-slice` 自动识别；需要精确控制行列时再用 `/api/atlas/slice`。
+6. Unity APK 打包后检查使用 `/api/unity/apk-extract`；未配置外部工具时先读取 `manifest.json` 和 `apk-unity-data/`，配置 AssetRipper 后再生成还原工程。
+
+## 新增工具 API
+
+以下接口同样使用本地 HTTP 服务，不会上传到外部服务。
+
+| 功能 | 接口 | 输入 | 输出 |
+| --- | --- | --- | --- |
+| 图片格式转换 / 压缩 | `POST /api/image/convert` | `image`，`format=png/webp/jpeg/avif`，`quality`，`maxSide`，`background` | 图片文件 |
+| 透明边缘修复 | `POST /api/image/edge-fix` | `image`，`iterations`，`alphaThreshold` | PNG |
+| Sprite 描边 / 投影 / 调色 / 压色 | `POST /api/image/stylize` | `image`，`operation=outline/shadow/palette/color` 及对应参数 | PNG |
+| 法线图 | `POST /api/image/normal-map` | `image`，`strength` | PNG |
+| 遮罩图 / 高光图基础图 | `POST /api/image/mask-map` | `image`，`channel=alpha/luma`，`invert` | PNG |
+| 增强图集打包 | `POST /api/atlas/pack` | 多个 `frames`，`padding`，`extrude`，`trim`，`powerOfTwo`，`maxSize`，`engine` | ZIP，含 `atlas.png`、`atlas.json`、引擎 JSON |
+| 序列帧动图 | `POST /api/sequence/animation` | 多个 `frames`，`fps`，`format=gif/webp/mp4` | GIF / WebP / MP4 |
+| 九宫格切片 | `POST /api/ui/nine-slice` | `image`，`left/right/top/bottom` | ZIP，含 9 个切片和 `nine-slice.json` |
+| Tileset 切片 | `POST /api/tileset/slice` | `image`，`tileWidth`，`tileHeight`，`marginX/Y`，`gapX/Y`，`dedupe` | ZIP，含 tile PNG 和 `tileset.json` |
+| 素材质检 | `POST /api/quality/report` | 多个 `images` | JSON 报告 |
+| 批量调色 | `POST /api/batch/color` | 多个 `images`，`brightness`，`saturation`，`hue` | ZIP |
+| 音频转码 / 标准化 | `POST /api/audio/process` | `audio`，`operation=convert/normalize`，`format=ogg/mp3/wav/m4a`，`bitrate` | 音频文件 |
+| Unity APK 工程还原 / 资源提取 | `POST /api/unity/apk-extract` | `apk`，`mode`，`tool`，可选 `commandTemplate` | ZIP，含 `manifest.json`、原始 Unity 结构和外部工具输出 |

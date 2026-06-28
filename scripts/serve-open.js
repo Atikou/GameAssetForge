@@ -13,6 +13,7 @@ const mcpPort = Number(process.env.MCP_PORT || 5181);
 const url = `http://${host}:${webPort}/`;
 const apiUrl = `http://${host}:${apiPort}`;
 const mcpUrl = `http://${host}:${mcpPort}/mcp`;
+const shouldOpenBrowser = process.env.GAF_NO_OPEN !== "1";
 const children = [];
 let shuttingDown = false;
 
@@ -124,6 +125,28 @@ async function waitForHealth(targetUrl, label) {
 
 const server = http.createServer((req, res) => {
   const requestUrl = new URL(req.url, url);
+  if (requestUrl.pathname.startsWith("/api/")) {
+    const proxyReq = http.request(
+      `${apiUrl}${requestUrl.pathname}${requestUrl.search}`,
+      {
+        method: req.method,
+        headers: {
+          ...req.headers,
+          host: `${host}:${apiPort}`,
+        },
+      },
+      (proxyRes) => {
+        res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+        proxyRes.pipe(res);
+      },
+    );
+    proxyReq.on("error", (error) => {
+      send(res, 502, `API proxy failed: ${error.message}`);
+    });
+    req.pipe(proxyReq);
+    return;
+  }
+
   const decodedPath = decodeURIComponent(requestUrl.pathname);
   const relativePath = decodedPath === "/" ? "index.html" : decodedPath.slice(1);
   const filePath = path.resolve(root, relativePath);
@@ -194,7 +217,7 @@ server.listen(webPort, host, async () => {
     console.log(`GameAssetForge API：${apiUrl}`);
     console.log(`GameAssetForge MCP：${mcpUrl}`);
     console.log("按 Ctrl+C 会同时关闭网页、API 和 MCP。");
-    openBrowser(url);
+    if (shouldOpenBrowser) openBrowser(url);
   } catch (error) {
     console.error(error.message);
     shutdown(1);

@@ -2,6 +2,7 @@ node_modules/
 outputs/
 dist/
 build/
+tools/
 .DS_Store
 Thumbs.db
 *.log

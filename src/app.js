@@ -27,6 +27,9 @@ const state = {
   editorDrawing: false,
   editorPointer: null,
   editorZoomWidth: null,
+  unityApkInspection: null,
+  unityApkInspectToken: 0,
+  rankingFetchToken: 0,
 };
 
 const statusText = $("#statusText");
@@ -133,6 +136,69 @@ const toolMeta = {
   },
 };
 
+Object.assign(toolMeta, {
+  convertPanel: {
+    name: "格式转换",
+    desc: "图片格式转换、压缩和最长边限制。",
+    use: "格式适配",
+    useDesc: "用于商店图、预览图、UI 图和 Web 资源的体积控制。",
+    input: "图片文件",
+    inputDesc: "选择 PNG、JPG、WebP 等浏览器可读取图片。",
+    output: "PNG / WebP / JPG / AVIF",
+    outputDesc: "按目标格式导出并保留必要的透明通道或背景填充。",
+  },
+  atlasPackPanel: {
+    name: "图集打包",
+    desc: "增强图集打包，支持 padding、extrude、裁边、2 的幂和引擎 manifest。",
+    use: "引擎导入",
+    useDesc: "适合把散图整理成 Unity、Godot、Cocos、Pixi 可继续使用的图集。",
+    input: "多张 Sprite",
+    inputDesc: "一次选择序列帧、UI 图标或 tile 小图。",
+    output: "Atlas ZIP",
+    outputDesc: "包含 atlas.png、atlas.json 和对应引擎预设 JSON。",
+  },
+  unityApkPanel: {
+    name: "Unity APK",
+    desc: "扫描 Unity Android 包中的 Data、AssetBundle、IL2CPP metadata，并可调用外部工具还原工程或导出资源。",
+    use: "打包后资源检查",
+    useDesc: "用于项目打包后回看资源、引用结构、场景/Prefab 还原结果或 IL2CPP 类型信息。",
+    input: "APK 文件",
+    inputDesc: "选择 Unity 2022+ 或其他版本导出的 Android APK，本地 API 会先做结构分析。",
+    output: "Unity 提取 ZIP",
+    outputDesc: "包含 manifest.json、原始 Unity 结构；配置外部工具后还会包含 tool-output。",
+  },
+  spriteFxPanel: {
+    name: "Sprite 增强",
+    desc: "透明边缘修复、描边、投影、调色、调色板压色、法线图和遮罩图。",
+    use: "单图增强",
+    useDesc: "用于清理抠图边缘、生成受击/禁用状态、补充 2D 光照贴图。",
+    input: "单张 Sprite",
+    inputDesc: "选择需要修饰或生成贴图的透明 PNG。",
+    output: "PNG",
+    outputDesc: "导出处理后的透明 PNG 或贴图。",
+  },
+  pipelinePanel: {
+    name: "流水线工具",
+    desc: "序列帧动图、九宫格、tileset、素材质检和批量调色。",
+    use: "批处理检查",
+    useDesc: "把常见资产整理动作集中到一个高频面板里。",
+    input: "图片或序列帧",
+    inputDesc: "根据功能选择单图、多图或序列帧。",
+    output: "ZIP / 动图 / 报告",
+    outputDesc: "导出可交付文件，或在页面中查看质检 JSON。",
+  },
+  audioPanel: {
+    name: "音频工具",
+    desc: "游戏音效和 BGM 转码、码率控制与响度标准化。",
+    use: "音频适配",
+    useDesc: "把音效快速整理成引擎常用格式。",
+    input: "音频文件",
+    inputDesc: "选择 wav、mp3、ogg、m4a 等音频。",
+    output: "OGG / MP3 / WAV / M4A",
+    outputDesc: "使用本地 ffmpeg 导出处理结果。",
+  },
+});
+
 const toolGroups = [
   {
     name: "图片清理",
@@ -163,6 +229,16 @@ const toolGroups = [
     name: "批量处理",
     desc: "多张素材按统一规则进入队列处理。",
     panels: ["batchPanel"],
+  },
+  {
+    name: "导出与引擎",
+    desc: "格式转换、增强图集和引擎 manifest。",
+    panels: ["convertPanel", "atlasPackPanel", "unityApkPanel"],
+  },
+  {
+    name: "增强与质检",
+    desc: "Sprite 增强、流水线检查和音频处理。",
+    panels: ["spriteFxPanel", "pipelinePanel", "audioPanel"],
   },
 ];
 
@@ -231,19 +307,194 @@ function colorDistance(r, g, b, key) {
   return Math.sqrt(dr * dr + dg * dg + db * db);
 }
 
-function applyChromaToImageData(imageData, keyColor, tolerance, softness) {
+function clampChannel(value) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function smoothStep(edge0, edge1, value) {
+  const t = Math.max(0, Math.min(1, (value - edge0) / Math.max(0.0001, edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+function estimateBackgroundColorFromImageData(imageData) {
+  const { width, height, data } = imageData;
+  const samples = [];
+  const radius = Math.max(1, Math.min(4, Math.floor(Math.min(width, height) / 24)));
+  const anchors = [
+    [0, 0],
+    [width - 1, 0],
+    [0, height - 1],
+    [width - 1, height - 1],
+  ];
+  anchors.forEach(([anchorX, anchorY]) => {
+    for (let oy = -radius; oy <= radius; oy += 1) {
+      for (let ox = -radius; ox <= radius; ox += 1) {
+        const x = Math.max(0, Math.min(width - 1, anchorX + ox));
+        const y = Math.max(0, Math.min(height - 1, anchorY + oy));
+        const index = (y * width + x) * 4;
+        samples.push([data[index], data[index + 1], data[index + 2]]);
+      }
+    }
+  });
+  const median = (channel) => {
+    const values = samples.map((sample) => sample[channel]).sort((a, b) => a - b);
+    return values[Math.floor(values.length / 2)] || 0;
+  };
+  return { r: median(0), g: median(1), b: median(2) };
+}
+
+function suppressDominantSpill(r, g, b, key, strength, mask) {
+  if (strength <= 0 || mask <= 0) return { r, g, b };
+  const channels = [r, g, b];
+  const keyChannels = [key.r, key.g, key.b];
+  const dominant = keyChannels.indexOf(Math.max(...keyChannels));
+  const sortedKey = [...keyChannels].sort((a, b) => b - a);
+  if (sortedKey[0] - sortedKey[1] < 36) return { r, g, b };
+  const otherIndices = [0, 1, 2].filter((index) => index !== dominant);
+  const otherMax = Math.max(channels[otherIndices[0]], channels[otherIndices[1]]);
+  const excess = Math.max(0, channels[dominant] - otherMax);
+  channels[dominant] -= excess * strength * mask;
+  return { r: clampChannel(channels[0]), g: clampChannel(channels[1]), b: clampChannel(channels[2]) };
+}
+
+function boxFilterFloat(values, width, height, radius) {
+  const integral = new Float64Array((width + 1) * (height + 1));
+  for (let y = 0; y < height; y += 1) {
+    let rowSum = 0;
+    const integralRow = (y + 1) * (width + 1);
+    const previousRow = y * (width + 1);
+    for (let x = 0; x < width; x += 1) {
+      rowSum += values[y * width + x];
+      integral[integralRow + x + 1] = integral[previousRow + x + 1] + rowSum;
+    }
+  }
+  const output = new Float32Array(values.length);
+  for (let y = 0; y < height; y += 1) {
+    const y0 = Math.max(0, y - radius);
+    const y1 = Math.min(height - 1, y + radius);
+    for (let x = 0; x < width; x += 1) {
+      const x0 = Math.max(0, x - radius);
+      const x1 = Math.min(width - 1, x + radius);
+      const area = (x1 - x0 + 1) * (y1 - y0 + 1);
+      const a = y0 * (width + 1) + x0;
+      const b = y0 * (width + 1) + x1 + 1;
+      const c = (y1 + 1) * (width + 1) + x0;
+      const d = (y1 + 1) * (width + 1) + x1 + 1;
+      output[y * width + x] = (integral[d] - integral[b] - integral[c] + integral[a]) / area;
+    }
+  }
+  return output;
+}
+
+function guidedFilterAlpha(data, width, height, alpha, radius, epsilon) {
+  const count = width * height;
+  const guide = new Float32Array(count);
+  const guideAlpha = new Float32Array(count);
+  const guideGuide = new Float32Array(count);
+  for (let pixel = 0; pixel < count; pixel += 1) {
+    const i = pixel * 4;
+    const luminance = (data[i] * 0.2126 + data[i + 1] * 0.7152 + data[i + 2] * 0.0722) / 255;
+    guide[pixel] = luminance;
+    guideAlpha[pixel] = luminance * alpha[pixel];
+    guideGuide[pixel] = luminance * luminance;
+  }
+  const meanGuide = boxFilterFloat(guide, width, height, radius);
+  const meanAlpha = boxFilterFloat(alpha, width, height, radius);
+  const meanGuideAlpha = boxFilterFloat(guideAlpha, width, height, radius);
+  const meanGuideGuide = boxFilterFloat(guideGuide, width, height, radius);
+  const a = new Float32Array(count);
+  const b = new Float32Array(count);
+  for (let i = 0; i < count; i += 1) {
+    const covariance = meanGuideAlpha[i] - meanGuide[i] * meanAlpha[i];
+    const variance = meanGuideGuide[i] - meanGuide[i] * meanGuide[i];
+    a[i] = covariance / (variance + epsilon);
+    b[i] = meanAlpha[i] - a[i] * meanGuide[i];
+  }
+  const meanA = boxFilterFloat(a, width, height, radius);
+  const meanB = boxFilterFloat(b, width, height, radius);
+  const output = new Float32Array(count);
+  for (let i = 0; i < count; i += 1) {
+    output[i] = Math.max(0, Math.min(1, meanA[i] * guide[i] + meanB[i]));
+  }
+  return output;
+}
+
+function refineAlphaWithAutoTrimap(data, width, height, alpha, distance, options) {
+  const enabled = options.matting !== false;
+  const strength = Math.max(0, Math.min(1, Number(options.mattingStrength ?? 70) / 100));
+  if (!enabled || strength <= 0) return alpha;
+  const radius = Math.max(1, Math.min(32, Math.round(Number(options.mattingRadius ?? 4))));
+  const refined = guidedFilterAlpha(data, width, height, alpha, radius, 0.0008);
+  const output = new Float32Array(alpha.length);
+  const foregroundLock = options.tolerance + options.softness * 1.35;
+  const backgroundLock = Math.max(0, options.fadeStart * 0.72);
+  for (let i = 0; i < alpha.length; i += 1) {
+    if (alpha[i] <= 0.015 || distance[i] <= backgroundLock) {
+      output[i] = 0;
+    } else if (alpha[i] >= 0.985 && distance[i] >= foregroundLock) {
+      output[i] = 1;
+    } else {
+      output[i] = Math.max(0, Math.min(1, alpha[i] * (1 - strength) + refined[i] * strength));
+    }
+  }
+  return output;
+}
+
+function applyChromaToImageData(imageData, keyColor, tolerance, softness, options = {}) {
   const data = imageData.data;
+  const key = keyColor === "auto" ? estimateBackgroundColorFromImageData(imageData) : keyColor;
   const fadeStart = Math.max(0, tolerance - softness);
   const fadeRange = Math.max(1, tolerance - fadeStart);
+  const spill = Math.max(0, Math.min(1, Number(options.spill ?? 85) / 100));
+  const edgeCleanup = Math.max(0, Math.min(1, Number(options.edgeCleanup ?? 18) / 100));
+  const spillRange = tolerance + softness * 2 + 24;
+  const edgeFloor = edgeCleanup * 0.22;
+  const alpha = new Float32Array(imageData.width * imageData.height);
+  const distanceMap = new Float32Array(alpha.length);
 
-  for (let i = 0; i < data.length; i += 4) {
-    const distance = colorDistance(data[i], data[i + 1], data[i + 2], keyColor);
+  for (let i = 0, pixel = 0; i < data.length; i += 4, pixel += 1) {
+    const distance = colorDistance(data[i], data[i + 1], data[i + 2], key);
+    distanceMap[pixel] = distance;
+    let matte = 1;
     if (distance <= fadeStart) {
-      data[i + 3] = 0;
+      matte = 0;
     } else if (distance < tolerance) {
-      const alphaFactor = (distance - fadeStart) / fadeRange;
-      data[i + 3] = Math.round(data[i + 3] * alphaFactor);
+      matte = smoothStep(fadeStart, tolerance, distance);
     }
+    if (edgeCleanup > 0 && matte > 0 && matte < 1) {
+      matte = matte <= edgeFloor ? 0 : (matte - edgeFloor) / (1 - edgeFloor);
+    }
+    const finalAlpha = Math.max(0, Math.min(1, (data[i + 3] / 255) * matte));
+    if (finalAlpha > 0 && spill > 0) {
+      const mask = Math.max(1 - matte, Math.max(0, 1 - distance / Math.max(1, spillRange)));
+      if (mask > 0) {
+        const safeAlpha = Math.max(0.06, finalAlpha);
+        const recoveredR = (data[i] - key.r * (1 - safeAlpha)) / safeAlpha;
+        const recoveredG = (data[i + 1] - key.g * (1 - safeAlpha)) / safeAlpha;
+        const recoveredB = (data[i + 2] - key.b * (1 - safeAlpha)) / safeAlpha;
+        const blend = spill * mask;
+        data[i] = clampChannel(data[i] * (1 - blend) + recoveredR * blend);
+        data[i + 1] = clampChannel(data[i + 1] * (1 - blend) + recoveredG * blend);
+        data[i + 2] = clampChannel(data[i + 2] * (1 - blend) + recoveredB * blend);
+      }
+      const nearKey = Math.max(0, 1 - distance / Math.max(1, spillRange));
+      const dominantMask = distance < spillRange ? 1 : 0;
+      const suppressed = suppressDominantSpill(data[i], data[i + 1], data[i + 2], key, spill, dominantMask);
+      data[i] = suppressed.r;
+      data[i + 1] = suppressed.g;
+      data[i + 2] = suppressed.b;
+    }
+    alpha[pixel] = finalAlpha;
+  }
+
+  const refinedAlpha = refineAlphaWithAutoTrimap(data, imageData.width, imageData.height, alpha, distanceMap, {
+    ...options,
+    fadeStart,
+    tolerance,
+    softness,
+  });
+  for (let i = 3, pixel = 0; i < data.length; i += 4, pixel += 1) {
+    data[i] = clampChannel(refinedAlpha[pixel] * 255);
   }
 
   return imageData;
@@ -257,6 +508,12 @@ function setKeyColor(hexColor) {
   $("#keyPreset").value = "custom";
   $("#customKeyColor").value = hexColor.toLowerCase();
   applyChromaKey();
+}
+
+function chromaKeyFromControls(presetId, colorId) {
+  const preset = $(`#${presetId}`).value;
+  if (preset === "auto") return "auto";
+  return hexToRgb(preset === "custom" ? $(`#${colorId}`).value : preset);
 }
 
 function setCanvasPickMode(active) {
@@ -322,6 +579,88 @@ function downloadBlob(blob, filename) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 250);
+}
+
+function selectedFiles(id) {
+  return [...($(`#${id}`)?.files || [])];
+}
+
+function setText(id, value) {
+  const element = $(`#${id}`);
+  if (element) element.textContent = value;
+}
+
+function appendFiles(formData, field, files) {
+  files.forEach((file) => formData.append(field, file, file.name));
+}
+
+async function apiDownload(endpoint, formData, fallbackName, statusId) {
+  setText(statusId, "处理中...");
+  const response = await fetch(endpoint, {
+    method: "POST",
+    body: formData,
+  });
+  const blob = await response.blob();
+  if (!response.ok) {
+    const message = await blob.text();
+    throw new Error(message || `Request failed: ${response.status}`);
+  }
+  const disposition = response.headers.get("content-disposition") || "";
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] || fallbackName;
+  downloadBlob(blob, filename);
+  setText(statusId, `已导出 ${filename}`);
+  setStatus(`已导出 ${filename}`);
+}
+
+async function apiJson(endpoint, formData) {
+  const options = formData ? { method: "POST", body: formData } : {};
+  const response = await fetch(endpoint, options);
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`${endpoint} ${response.status}: ${message || response.statusText}`);
+  }
+  return response.json();
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatChineseDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+async function downloadResponseBlob(endpoint, fallbackName) {
+  const response = await fetch(endpoint);
+  const blob = await response.blob();
+  if (!response.ok) {
+    const message = await blob.text();
+    throw new Error(message || `Request failed: ${response.status}`);
+  }
+  const disposition = response.headers.get("content-disposition") || "";
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] || fallbackName;
+  downloadBlob(blob, filename);
+  return filename;
 }
 
 function canvasToBlob(canvas, type = "image/png") {
@@ -540,11 +879,15 @@ function applyChromaKey() {
   const sourceCtx = source.getContext("2d", { willReadFrequently: true });
   const resultCtx = result.getContext("2d", { willReadFrequently: true });
   const imageData = sourceCtx.getImageData(0, 0, source.width, source.height);
-  const preset = $("#keyPreset").value;
-  const keyColor = hexToRgb(preset === "custom" ? $("#customKeyColor").value : preset);
+  const keyColor = chromaKeyFromControls("keyPreset", "customKeyColor");
   const tolerance = Number($("#keyTolerance").value);
   const softness = Number($("#softness").value);
-  applyChromaToImageData(imageData, keyColor, tolerance, softness);
+  applyChromaToImageData(imageData, keyColor, tolerance, softness, {
+    spill: Number($("#spillStrength")?.value || 85),
+    edgeCleanup: Number($("#edgeCleanup")?.value || 18),
+    mattingStrength: Number($("#mattingStrength")?.value || 70),
+    mattingRadius: Number($("#mattingRadius")?.value || 4),
+  });
 
   resultCtx.clearRect(0, 0, result.width, result.height);
   resultCtx.putImageData(imageData, 0, 0);
@@ -608,12 +951,20 @@ function captureVideoFrame(video, time) {
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
   if ($("#videoChromaEnabled").checked) {
-    const preset = $("#videoKeyPreset").value;
-    const keyColor = hexToRgb(preset === "custom" ? $("#videoKeyColor").value : preset);
+    const keyColor = chromaKeyFromControls("videoKeyPreset", "videoKeyColor");
     const tolerance = Number($("#videoKeyTolerance").value);
     const softness = Number($("#videoSoftness").value);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    ctx.putImageData(applyChromaToImageData(imageData, keyColor, tolerance, softness), 0, 0);
+    ctx.putImageData(
+      applyChromaToImageData(imageData, keyColor, tolerance, softness, {
+        spill: Number($("#videoSpillStrength")?.value || 85),
+        edgeCleanup: Number($("#videoEdgeCleanup")?.value || 18),
+        mattingStrength: Number($("#videoMattingStrength")?.value || 70),
+        mattingRadius: Number($("#videoMattingRadius")?.value || 4),
+      }),
+      0,
+      0,
+    );
   }
 
   const dataUrl = canvas.toDataURL("image/png");
@@ -2052,6 +2403,187 @@ function setupTheme() {
   });
 }
 
+function setupRankingWindow() {
+  const windowEl = $("#rankingWindow");
+  const backdrop = $("#rankingBackdrop");
+  const openButton = $("#rankingOpen");
+  const closeButton = $("#rankingClose");
+  const refreshButton = $("#rankingRefresh");
+  const sourceSelect = $("#rankingSource");
+  const countrySelect = $("#rankingCountry");
+  const chartSelect = $("#rankingChart");
+  const filterSelect = $("#rankingFilter");
+  const limitSelect = $("#rankingLimit");
+  const tableBody = $("#rankingTableBody");
+  const meta = $("#rankingMeta");
+  const subtitle = $("#rankingSubtitle");
+  if (!windowEl || !openButton || !refreshButton || !tableBody) return;
+
+  const closeRankingWindow = () => {
+    windowEl.classList.add("hidden");
+    backdrop?.classList.add("hidden");
+  };
+
+  const openRankingWindow = () => {
+    backdrop?.classList.remove("hidden");
+    windowEl.classList.remove("hidden");
+  };
+
+  const setMeta = (text) => {
+    if (meta) meta.textContent = text;
+  };
+
+  const clearTable = (text) => {
+    tableBody.replaceChildren();
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 9;
+    cell.textContent = text;
+    row.appendChild(cell);
+    tableBody.appendChild(row);
+  };
+
+  const renderRankings = (data) => {
+    tableBody.replaceChildren();
+    const items = data.items || [];
+    if (!items.length) {
+      clearTable("没有抓到榜单数据，可能是来源页面结构变化或网络被限制。");
+      return;
+    }
+
+    items.forEach((item) => {
+      const row = document.createElement("tr");
+
+      const rankCell = document.createElement("td");
+      rankCell.textContent = item.rank ? `#${item.rank}` : "-";
+      row.appendChild(rankCell);
+
+      const changeCell = document.createElement("td");
+      const change = item.rankChange || {};
+      if (change.direction === "up") {
+        changeCell.className = "rank-change rank-change-up";
+        changeCell.textContent = `↑${change.value || 0}`;
+      } else if (change.direction === "down") {
+        changeCell.className = "rank-change rank-change-down";
+        changeCell.textContent = `↓${change.value || 0}`;
+      } else {
+        changeCell.className = "rank-change";
+        changeCell.textContent = "-";
+      }
+      row.appendChild(changeCell);
+
+      const iconCell = document.createElement("td");
+      if (item.icon) {
+        const image = document.createElement("img");
+        image.className = "ranking-icon";
+        image.src = item.icon;
+        image.alt = `${item.name || "app"} icon`;
+        iconCell.appendChild(image);
+      } else {
+        iconCell.textContent = "-";
+      }
+      row.appendChild(iconCell);
+
+      const nameCell = document.createElement("td");
+      const nameWrap = document.createElement("div");
+      nameWrap.className = "ranking-app-name";
+      const link = document.createElement("a");
+      link.textContent = item.name || "-";
+      link.href = item.sourceUrl || "#";
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      nameWrap.appendChild(link);
+      const developer = document.createElement("span");
+      developer.textContent = item.developer || item.packageName || "-";
+      nameWrap.appendChild(developer);
+      nameCell.appendChild(nameWrap);
+      row.appendChild(nameCell);
+
+      const offlineCell = document.createElement("td");
+      offlineCell.textContent = item.offlineCandidate ? "可能" : "-";
+      if (item.offlineReason) offlineCell.title = item.offlineReason;
+      row.appendChild(offlineCell);
+
+      const ratingCell = document.createElement("td");
+      ratingCell.textContent = item.rating ? item.rating.toFixed(1) : "-";
+      row.appendChild(ratingCell);
+
+      const downloadCell = document.createElement("td");
+      downloadCell.textContent = item.recentDownloads ? `${item.downloads || "-"} / 近30日 ${item.recentDownloads}` : item.downloads || "-";
+      row.appendChild(downloadCell);
+
+      const releaseCell = document.createElement("td");
+      releaseCell.textContent = formatChineseDate(item.releaseDate) || "未公开";
+      row.appendChild(releaseCell);
+
+      const sourceCell = document.createElement("td");
+      sourceCell.textContent = item.source === "综合总榜" && item.sourceRanks?.length
+        ? `综合 · ${item.sourceRanks.length}源`
+        : `${item.source || data.source || "-"} · ${item.country || data.country || "-"}`;
+      if (item.overallScore) sourceCell.title = `RRF 分数: ${item.overallScore.toFixed(5)}`;
+      row.appendChild(sourceCell);
+
+      tableBody.appendChild(row);
+    });
+
+    if (subtitle) subtitle.textContent = `${data.label || "排行榜"}，${data.cached ? "来自缓存" : "刚刚刷新"}。`;
+    const releaseNote = data.fields?.releaseDate ? "" : "发布时间：当前公开来源未稳定提供，不使用更新时间代替。";
+    const algorithmNote = data.algorithm ? ` | 算法: ${data.algorithm.name}` : "";
+    setMeta(`来源: ${data.label || "-"} | 抓取时间: ${formatDateTime(data.fetchedAt)} | 条数: ${items.length}${algorithmNote}${releaseNote ? ` | ${releaseNote}` : ""}`);
+  };
+
+  const refreshRankings = async (force = true) => {
+    const token = state.rankingFetchToken + 1;
+    state.rankingFetchToken = token;
+    refreshButton.disabled = true;
+    clearTable("正在抓取公开榜单...");
+    setMeta("正在连接榜单来源...");
+    try {
+      const source = sourceSelect?.value || "appbrain";
+      const country = countrySelect?.value || "us";
+      const chart = chartSelect?.value || "top_new_free";
+      const filter = filterSelect?.value || "all";
+      const limit = limitSelect?.value || "50";
+      const data = await apiJson(
+        `/api/rankings/apps?source=${encodeURIComponent(source)}&country=${encodeURIComponent(country)}&chart=${encodeURIComponent(chart)}&filter=${encodeURIComponent(filter)}&limit=${encodeURIComponent(limit)}&refresh=${force ? "1" : "0"}`,
+      );
+      if (token !== state.rankingFetchToken) return;
+      renderRankings(data);
+      setStatus(`排行榜已刷新：${data.items?.length || 0} 条`);
+    } catch (error) {
+      if (token !== state.rankingFetchToken) return;
+      const message = String(error.message || "");
+      clearTable(
+        message.includes("/api/rankings/apps 404") || message.includes("Not found")
+          ? "排行榜接口不可用：请重启 GameAssetForge 服务，或确认使用带 API 代理的最新 npm run serve。"
+          : message,
+      );
+      setMeta("抓取失败。可以稍后重试，或切换另一个公开来源。");
+    } finally {
+      if (token === state.rankingFetchToken) refreshButton.disabled = false;
+    }
+  };
+
+  openButton.addEventListener("click", () => {
+    openRankingWindow();
+    if (!tableBody.dataset.loaded) {
+      tableBody.dataset.loaded = "true";
+      refreshRankings(false);
+    }
+  });
+  closeButton?.addEventListener("click", closeRankingWindow);
+  backdrop?.addEventListener("click", closeRankingWindow);
+  refreshButton.addEventListener("click", () => refreshRankings(true));
+  sourceSelect?.addEventListener("change", () => refreshRankings(true));
+  countrySelect?.addEventListener("change", () => refreshRankings(true));
+  chartSelect?.addEventListener("change", () => refreshRankings(true));
+  filterSelect?.addEventListener("change", () => refreshRankings(true));
+  limitSelect?.addEventListener("change", () => refreshRankings(true));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !windowEl.classList.contains("hidden")) closeRankingWindow();
+  });
+}
+
 function setupChromaTool() {
   $("#chromaInput").addEventListener("change", async (event) => {
     const [file] = event.target.files;
@@ -2060,11 +2592,15 @@ function setupChromaTool() {
     applyChromaKey();
   });
 
-  ["keyPreset", "customKeyColor", "keyTolerance", "softness"].forEach((id) => {
+  ["keyPreset", "customKeyColor", "keyTolerance", "softness", "spillStrength", "edgeCleanup", "mattingStrength", "mattingRadius"].forEach((id) => {
     $(`#${id}`).addEventListener("input", () => {
       if (id === "customKeyColor") $("#keyPreset").value = "custom";
       $("#keyToleranceValue").textContent = $("#keyTolerance").value;
       $("#softnessValue").textContent = $("#softness").value;
+      $("#spillStrengthValue").textContent = $("#spillStrength").value;
+      $("#edgeCleanupValue").textContent = $("#edgeCleanup").value;
+      $("#mattingStrengthValue").textContent = $("#mattingStrength").value;
+      $("#mattingRadiusValue").textContent = $("#mattingRadius").value;
       applyChromaKey();
     });
   });
@@ -2161,11 +2697,24 @@ function setupVideoTool() {
     extractFrames().catch((error) => setStatus(error.message));
   });
 
-  ["videoKeyPreset", "videoKeyColor", "videoKeyTolerance", "videoSoftness"].forEach((id) => {
+  [
+    "videoKeyPreset",
+    "videoKeyColor",
+    "videoKeyTolerance",
+    "videoSoftness",
+    "videoSpillStrength",
+    "videoEdgeCleanup",
+    "videoMattingStrength",
+    "videoMattingRadius",
+  ].forEach((id) => {
     $(`#${id}`).addEventListener("input", () => {
       if (id === "videoKeyColor") $("#videoKeyPreset").value = "custom";
       $("#videoKeyToleranceValue").textContent = $("#videoKeyTolerance").value;
       $("#videoSoftnessValue").textContent = $("#videoSoftness").value;
+      $("#videoSpillStrengthValue").textContent = $("#videoSpillStrength")?.value || "85";
+      $("#videoEdgeCleanupValue").textContent = $("#videoEdgeCleanup")?.value || "18";
+      $("#videoMattingStrengthValue").textContent = $("#videoMattingStrength")?.value || "70";
+      $("#videoMattingRadiusValue").textContent = $("#videoMattingRadius")?.value || "4";
     });
   });
 
@@ -2425,8 +2974,575 @@ function setupAtlasSliceTool() {
   });
 }
 
+function setupExtendedTools() {
+  const bindFileState = (inputId, buttonIds, statusId, label) => {
+    const input = $(`#${inputId}`);
+    if (!input) return;
+    input.addEventListener("change", () => {
+      const hasFiles = selectedFiles(inputId).length > 0;
+      buttonIds.forEach((id) => {
+        const button = $(`#${id}`);
+        if (button) button.disabled = !hasFiles;
+      });
+      setText(statusId, hasFiles ? `${label}: ${selectedFiles(inputId).length}` : "等待选择素材...");
+    });
+  };
+
+  bindFileState("convertInput", ["runConvert"], "convertStatus", "已选择图片");
+  bindFileState("atlasPackInput", ["runAtlasPack"], "atlasPackStatus", "已选择帧图");
+  bindFileState("unityApkInput", ["runUnityApkExtract"], "unityApkStatus", "已选择 APK");
+  bindFileState("spriteFxInput", ["runSpriteFx"], "spriteFxStatus", "已选择 Sprite");
+  bindFileState("animationInput", ["runAnimationExport"], "pipelineReport", "已选择序列帧");
+  bindFileState("gridToolInput", ["runNineSlice", "runTileset"], "pipelineReport", "已选择网格图片");
+  bindFileState("qualityInput", ["runQualityReport", "runBatchColor"], "pipelineReport", "已选择质检素材");
+  bindFileState("audioInput", ["runAudio"], "audioStatus", "已选择音频");
+
+  const renderUnityToolchain = (status) => {
+    const lines = [`内置工具目录: ${status.externalRoot}`];
+    status.tools.forEach((tool) => {
+      const state = tool.automationAvailable ? "OK" : tool.available ? "需专家模式" : "缺失";
+      lines.push(
+        `${state} ${tool.label} (${tool.kind})`,
+        `  用途: ${tool.purpose}`,
+        `  目录: ${tool.directory}`,
+        `  程序: ${tool.executable || tool.candidates.join(" / ")}`,
+      );
+      if (tool.manualReason) lines.push(`  说明: ${tool.manualReason}`);
+      if (tool.script && !tool.scriptAvailable) lines.push(`  脚本缺失: ${tool.script}`);
+    });
+    if (status.restorePipeline) {
+      lines.push("", "完整复原内置链路:");
+      Object.entries(status.restorePipeline).forEach(([name, tool]) => {
+        lines.push(`${tool.available ? "OK" : "缺失"} ${name}: ${tool.path}`);
+      });
+    }
+    setText("unityApkStatus", lines.join("\n"));
+  };
+
+  const detectUnityTools = () => {
+    setText("unityApkStatus", "检测内置工具链...");
+    apiJson("/api/unity/toolchain")
+      .then(renderUnityToolchain)
+      .catch((error) => setText("unityApkStatus", error.message));
+  };
+
+  const updateUnityExpertFields = () => {
+    const expert = $("#unityRunMode")?.value === "expert";
+    document.querySelectorAll(".unity-expert-field").forEach((field) => field.classList.toggle("hidden", !expert));
+  };
+
+  const currentUnityToolLabel = () => {
+    const mode = $("#unityApkMode")?.value;
+    return {
+      resources: "AssetStudio（资源转换导出）",
+      assets: "AssetStudio（资源转换导出）",
+      full: "AssetStudio + jadx + Cpp2IL（可用时）",
+    }[mode] || "AssetStudio（资源转换导出）";
+  };
+
+  const renderUnityModeGuide = () => {
+    const mode = $("#unityApkMode")?.value || "resources";
+    const toolLabel = currentUnityToolLabel();
+    const lines = [
+      "当前模式说明",
+      "",
+      `处理模式: ${mode === "full" ? "导出全部 + Unity 可打开结构" : "只导出资源"}`,
+      `内部工具链: ${toolLabel}`,
+      "",
+      "生成后的 ZIP 里会有什么:",
+    ];
+
+    if (mode === "full") {
+      lines.push(
+        "- UnityRestoredProject/: Unity 2022+ 可以打开的检查工程骨架。",
+        "- UnityRestoredProject/Assets/Extracted/: AssetStudio 转出的贴图、音频、模型、文本等资源。",
+        "- UnityRestoredProject/Assets/CodeRecovery/: metadata、Managed DLL 或 Cpp2IL 结果（条件满足时）。",
+        "- Decompiled/AndroidJava/: jadx 反编译出的 Android Java/Dex 层代码。",
+        "- REVERSING_REPORT.md 和 ReverseSummary.json: 本次复原质量、缺失项和工具日志摘要。",
+        "",
+        "需要注意:",
+        "- 这不是原始开发工程，只是便于 Unity 打开检查的复原结构。",
+        "- IL2CPP 游戏不能直接还原原始 C# 源码；有 libil2cpp.so + global-metadata.dat 时，才会尝试 Cpp2IL 类型恢复。",
+        "- 如果 APK 是 App Bundle 的 base.apk，native 代码常在 config.arm64_v8a.apk 这种 split 包里。",
+      );
+    } else {
+      lines.push(
+        "- tool-output/: AssetStudio 转出的 Texture2D/Sprite、AudioClip、TextAsset、Mesh 等。",
+        "- manifest.json: APK 结构、工具链状态和资源导出统计。",
+        "- 这个模式不输出 Java/IL2CPP 代码，也不创建 Unity 工程骨架。",
+        "- 正常情况下不会把原始 bundle/Data 一起打包进去，所以你看到的应是转换后的资源文件。",
+      );
+    }
+
+    if (state.unityApkInspection) {
+      const analysis = state.unityApkInspection.analysis || {};
+      lines.push(
+        "",
+        "当前 APK 验证:",
+        `- ${state.unityApkInspection.isUnityLike ? "已检测为 Unity APK" : "未检测到 Unity APK 结构"}`,
+        `- Unity 相关文件: ${state.unityApkInspection.unityFileCount || 0}`,
+        `- AssetBundle: ${(analysis.assetBundles || []).length}`,
+        `- global-metadata.dat: ${(analysis.metadataFiles || []).length}`,
+        `- libil2cpp.so: ${(analysis.il2cppLibraries || []).length}`,
+      );
+    }
+
+    setText("unityApkStatus", lines.join("\n"));
+  };
+
+  const updateUnityModeGuidance = () => {
+    const includeRaw = $("#unityIncludeRaw");
+    if (includeRaw) {
+      includeRaw.checked = false;
+    }
+    renderUnityModeGuide();
+  };
+
+  const isUnityApkInputFile = (file) => /\.(apk|zip)$/i.test(file?.name || "");
+
+  const setUnityApkInputFile = (file) => {
+    const input = $("#unityApkInput");
+    if (!input || !file) return false;
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  };
+
+  const setupUnityApkDropzone = () => {
+    const dropzone = $("#unityApkDropzone");
+    if (!dropzone) return;
+    const leave = () => dropzone.classList.remove("is-drag-over");
+    ["dragenter", "dragover"].forEach((eventName) => {
+      dropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        dropzone.classList.add("is-drag-over");
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      });
+    });
+    ["dragleave", "dragend"].forEach((eventName) => {
+      dropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        leave();
+      });
+    });
+    dropzone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      leave();
+      const file = [...(event.dataTransfer?.files || [])].find(isUnityApkInputFile);
+      if (!file) {
+        setText("unityApkStatus", "请拖入 .apk 或 .zip 文件。");
+        return;
+      }
+      setUnityApkInputFile(file);
+    });
+  };
+
+  const closeUnityInspectDialog = () => {
+    $("#unityInspectDialog")?.classList.add("hidden");
+  };
+
+  const showUnityInspectDialog = (inspection) => {
+    const dialog = $("#unityInspectDialog");
+    const title = $("#unityInspectTitle");
+    const subtitle = $("#unityInspectSubtitle");
+    const report = $("#unityInspectReport");
+    const confirm = $("#unityInspectConfirm");
+    if (!dialog || !inspection) return;
+
+    const analysis = inspection.analysis || {};
+    if (title) title.textContent = inspection.title || (inspection.isUnityLike ? "Unity APK 验证通过" : "Unity APK 验证未通过");
+    if (subtitle) subtitle.textContent = inspection.subtitle || inspection.source || "APK 结构检查";
+    if (confirm) {
+      confirm.disabled = !inspection.canExtract;
+      confirm.textContent = inspection.canExtract ? "继续提取" : "不可继续";
+    }
+
+    const lines = [
+      `文件: ${inspection.source || "-"}`,
+      `大小: ${Math.round((inspection.size || 0) / 1024 / 1024 * 100) / 100} MB`,
+      `结果: ${inspection.isUnityLike ? "检测为 Unity APK" : "未检测到 Unity APK 结构"}`,
+      `脚本后端: ${analysis.scriptingBackend || "Unknown"}`,
+      "",
+      "结构统计:",
+      `  总文件: ${analysis.fileCount || 0}`,
+      `  Unity 相关文件: ${inspection.unityFileCount || 0}`,
+      `  assets/bin/Data: ${analysis.unityDataFiles || 0}`,
+      `  StreamingAssets: ${analysis.streamingAssets || 0}`,
+      `  AssetBundle: ${(analysis.assetBundles || []).length}`,
+      `  .assets 文件: ${(analysis.assetFiles || []).length}`,
+      `  resource/ress/resS: ${(analysis.resourceFiles || []).length}`,
+      `  场景文件: ${(analysis.sceneFiles || []).length}`,
+      `  Managed DLL: ${(analysis.managedDlls || []).length}`,
+      `  libunity.so: ${(analysis.unityLibraries || []).length}`,
+      `  libil2cpp.so: ${(analysis.il2cppLibraries || []).length}`,
+      `  global-metadata.dat: ${(analysis.metadataFiles || []).length}`,
+      "",
+      `下一步: ${inspection.nextAction || "-"}`,
+    ];
+    if ((inspection.warnings || []).length) {
+      lines.push("", "警告:");
+      inspection.warnings.forEach((warning) => lines.push(`  - ${warning}`));
+    }
+    if ((inspection.notes || []).length) {
+      lines.push("", "备注:");
+      inspection.notes.forEach((note) => lines.push(`  - ${note}`));
+    }
+    if (report) report.textContent = lines.join("\n");
+    dialog.classList.remove("hidden");
+  };
+
+  const inspectSelectedUnityApk = async () => {
+    const [file] = selectedFiles("unityApkInput");
+    const button = $("#runUnityApkExtract");
+    const token = state.unityApkInspectToken + 1;
+    state.unityApkInspectToken = token;
+    state.unityApkInspection = null;
+    if (button) button.disabled = true;
+    if (!file) {
+      closeUnityInspectDialog();
+      return;
+    }
+
+    setText("unityApkStatus", "正在验证 APK 是否为 Unity 项目...");
+    const form = new FormData();
+    form.append("apk", file, file.name);
+    try {
+      const inspection = await apiJson("/api/unity/apk-inspect", form);
+      if (token !== state.unityApkInspectToken) return;
+      state.unityApkInspection = inspection;
+      if (button) button.disabled = !inspection.canExtract;
+      renderUnityModeGuide();
+      showUnityInspectDialog(inspection);
+    } catch (error) {
+      if (token !== state.unityApkInspectToken) return;
+      const rawMessage = error.message || "";
+      const friendlyMessage =
+        rawMessage.includes("/api/unity/apk-inspect 404") || rawMessage.includes("Not found")
+          ? "Unity APK 验证接口不可用：当前页面连接的服务不是最新后端，或没有运行在 GameAssetForge API 服务上。请刷新页面并确认使用 http://127.0.0.1:5180 打开。"
+          : rawMessage;
+      const inspection = {
+        source: file.name,
+        size: file.size,
+        isUnityLike: false,
+        canExtract: false,
+        analysis: {},
+        warnings: [friendlyMessage],
+        notes: [],
+        nextAction: "APK 结构解析失败，请确认文件是否为有效 APK/ZIP。",
+      };
+      state.unityApkInspection = inspection;
+      if (button) button.disabled = true;
+      setText("unityApkStatus", inspection.nextAction);
+      showUnityInspectDialog(inspection);
+    }
+  };
+
+  const setUnityProgress = (job) => {
+    const panel = $("#unityApkProgress");
+    const fill = $("#unityApkProgressFill");
+    const percentText = $("#unityApkProgressPercent");
+    const label = $("#unityApkProgressLabel");
+    const percent = Math.max(0, Math.min(100, Math.round(job?.percent || 0)));
+    panel?.classList.remove("hidden");
+    if (fill) fill.style.width = `${percent}%`;
+    if (percentText) percentText.textContent = `${percent}%`;
+    if (label) label.textContent = job?.message || job?.phase || "处理中...";
+  };
+
+  const renderUnityJob = (job) => {
+    setUnityProgress(job);
+    const lines = [
+      `任务: ${job.id}`,
+      `状态: ${job.status} / ${job.phase || "-"}`,
+      `进度: ${Math.round(job.percent || 0)}%`,
+      `当前: ${job.message || "-"}`,
+    ];
+    if (job.error) lines.push(`错误: ${job.error}`);
+    if (job.resultSummary) {
+      const summary = job.resultSummary;
+      lines.push(
+        "",
+        "ZIP 实际内容:",
+        `  总文件: ${summary.totalEntries || 0}`,
+        `  资源导出: ${summary.toolOutputEntries || 0}`,
+        `  Unity 工程: ${summary.unityProjectEntries || 0}`,
+        `  Java 代码: ${summary.javaEntries || 0}`,
+        `  原始结构: ${summary.rawEntries || 0}`,
+        `  模式/工具: ${summary.modeLabel || summary.mode || "-"} / ${summary.tool || "-"}`,
+      );
+      if (summary.restoreSummary?.counts) {
+        const counts = summary.restoreSummary.counts;
+        const recovery = summary.restoreSummary.recovery || {};
+        lines.push(
+          "",
+          "完整复原摘要:",
+          `  转出资源: ${counts.extractedAssets || 0}`,
+          `  Java 文件: ${counts.javaFiles || 0}`,
+          `  Unity 工程文件: ${counts.projectFiles || 0}`,
+          `  metadata: ${recovery.metadataCopied ? "已复制" : "未复制"}`,
+          `  libil2cpp.so: ${recovery.libil2cppFound ? "已检测到" : "未检测到"}`,
+        );
+      }
+      if (summary.resourceExport) {
+        lines.push(
+          "",
+          "资源导出摘要:",
+          `  AssetStudio 状态: ${summary.resourceExport.status || "-"}`,
+          `  输出文件: ${summary.resourceExport.outputFileCount || 0}`,
+        );
+      }
+      if (summary.externalTool?.status === "skipped" || summary.externalTool?.ran === false) {
+        lines.push(`  工具状态: ${summary.externalTool.status || "未运行"}`);
+        if (summary.externalTool.reason) lines.push(`  原因: ${summary.externalTool.reason}`);
+      }
+      if (summary.setupOnly) {
+        lines.push(
+          "",
+          "这次 ZIP 只有说明文件，没有实际资源/工程输出。",
+          "要提取资源：请选择“只提取游戏资源”。",
+          "要还原工程：需要专家模式配置可自动退出的 AssetRipper CLI。",
+        );
+      }
+      if ((summary.warnings || []).length) {
+        lines.push("", "输出警告:");
+        summary.warnings.forEach((warning) => lines.push(`  - ${warning}`));
+      }
+    }
+    if (job.detail?.fileCount) {
+      lines.push(
+        "",
+        "APK 识别:",
+        `  总文件: ${job.detail.fileCount}`,
+        `  Unity 相关: ${job.detail.unityFileCount || 0}`,
+        `  Data 文件: ${job.detail.unityDataFiles || 0}`,
+        `  AssetBundle: ${job.detail.assetBundles || 0}`,
+        `  Metadata: ${job.detail.metadataFiles || 0}`,
+      );
+    }
+    const log = (job.log || []).slice(-12);
+    if (log.length) {
+      lines.push("", "最近进度:");
+      log.forEach((entry) => {
+        lines.push(`  [${Math.round(entry.percent || 0)}%] ${entry.message}`);
+      });
+    }
+    setText("unityApkStatus", lines.join("\n"));
+  };
+
+  const runUnityApkJob = async (form) => {
+    const button = $("#runUnityApkExtract");
+    if (button) button.disabled = true;
+    try {
+      const job = await apiJson("/api/unity/apk-extract/jobs", form);
+      renderUnityJob(job);
+      let current = job;
+      while (!["done", "failed"].includes(current.status)) {
+        await sleep(900);
+        current = await apiJson(`/api/unity/apk-extract/jobs/${job.id}`);
+        renderUnityJob(current);
+      }
+      if (current.status === "failed") {
+        throw new Error(current.error || current.message || "Unity APK 任务失败");
+      }
+      if (current.resultSummary?.setupOnly) {
+        setStatus("Unity APK 任务完成，但没有实际资源/工程输出。");
+        return;
+      }
+      const filename = await downloadResponseBlob(current.downloadUrl, current.filename || `unity-apk-${file.name.replace(/\.[^.]+$/, "") || "apk"}.zip`);
+      setText("unityApkStatus", `${$("#unityApkStatus")?.textContent || ""}\n\n已导出: ${filename}`);
+      setStatus(`已导出 ${filename}`);
+    } finally {
+      if (button) button.disabled = selectedFiles("unityApkInput").length === 0;
+    }
+  };
+
+  $("#detectUnityTools")?.addEventListener("click", detectUnityTools);
+  $("#unityRunMode")?.addEventListener("change", () => {
+    updateUnityExpertFields();
+    updateUnityModeGuidance();
+  });
+  $("#unityApkMode")?.addEventListener("change", updateUnityModeGuidance);
+  $("#unityApkTool")?.addEventListener("change", updateUnityModeGuidance);
+  $("#unityIncludeRaw")?.addEventListener("change", updateUnityModeGuidance);
+  $("#unityToolCommand")?.addEventListener("input", updateUnityModeGuidance);
+  $("#unityToolArgs")?.addEventListener("input", updateUnityModeGuidance);
+  $("#unityApkInput")?.addEventListener("change", inspectSelectedUnityApk);
+  setupUnityApkDropzone();
+  document.querySelectorAll("[data-close-unity-inspect]").forEach((element) => {
+    element.addEventListener("click", closeUnityInspectDialog);
+  });
+  $("#unityInspectConfirm")?.addEventListener("click", closeUnityInspectDialog);
+  updateUnityExpertFields();
+  updateUnityModeGuidance();
+
+  $("#runConvert")?.addEventListener("click", () => {
+    const [file] = selectedFiles("convertInput");
+    const form = new FormData();
+    form.append("image", file, file.name);
+    form.append("format", $("#convertFormat").value);
+    form.append("quality", $("#convertQuality").value);
+    form.append("maxSide", $("#convertMaxSide").value);
+    form.append("background", $("#convertBackground").value);
+    apiDownload("/api/image/convert", form, `converted.${$("#convertFormat").value}`, "convertStatus").catch((error) =>
+      setText("convertStatus", error.message),
+    );
+  });
+
+  $("#runAtlasPack")?.addEventListener("click", () => {
+    const form = new FormData();
+    appendFiles(form, "frames", selectedFiles("atlasPackInput"));
+    form.append("padding", $("#atlasPackPadding").value);
+    form.append("extrude", $("#atlasPackExtrude").value);
+    form.append("maxSize", $("#atlasPackMaxSize").value);
+    form.append("engine", $("#atlasPackEngine").value);
+    form.append("trim", $("#atlasPackTrim").checked ? "true" : "false");
+    form.append("powerOfTwo", $("#atlasPackPOT").checked ? "true" : "false");
+    apiDownload("/api/atlas/pack", form, "packed-atlas.zip", "atlasPackStatus").catch((error) =>
+      setText("atlasPackStatus", error.message),
+    );
+  });
+
+  $("#runUnityApkExtract")?.addEventListener("click", () => {
+    const [file] = selectedFiles("unityApkInput");
+    if (!state.unityApkInspection?.canExtract) {
+      showUnityInspectDialog(
+        state.unityApkInspection || {
+          source: file?.name || "未选择 APK",
+          size: file?.size || 0,
+          isUnityLike: false,
+          canExtract: false,
+          analysis: {},
+          warnings: ["请先选择 APK 并等待 Unity 项目验证通过。"],
+          notes: [],
+          nextAction: "验证通过后才能执行提取工具链。",
+        },
+      );
+      return;
+    }
+    const form = new FormData();
+    const selectedMode = $("#unityApkMode")?.value === "full" ? "full" : "resources";
+    form.append("apk", file, file.name);
+    form.append("mode", selectedMode);
+    form.append("runMode", "quick");
+    form.append("tool", selectedMode === "full" ? "restore-pipeline" : "assetstudio");
+    form.append("assetTypes", "texture,audio,mesh,text");
+    form.append("includeRaw", "false");
+    const commandTemplate = $("#unityToolCommand").value.trim();
+    const toolArgs = $("#unityToolArgs").value.trim();
+    if (commandTemplate) form.append("commandTemplate", commandTemplate);
+    if (toolArgs) form.append("toolArgs", toolArgs);
+    runUnityApkJob(form).catch((error) =>
+      setText("unityApkStatus", error.message),
+    );
+  });
+
+  $("#runSpriteFx")?.addEventListener("click", () => {
+    const [file] = selectedFiles("spriteFxInput");
+    const operation = $("#spriteFxOperation").value;
+    const form = new FormData();
+    form.append("image", file, file.name);
+    form.append("color", $("#spriteFxColor").value);
+    form.append("thickness", $("#spriteFxStrength").value);
+    form.append("strength", $("#spriteFxStrength").value);
+    form.append("iterations", $("#spriteFxStrength").value);
+    form.append("colors", $("#spriteFxColors").value);
+    form.append("brightness", $("#spriteFxBrightness").value);
+    form.append("saturation", $("#spriteFxSaturation").value);
+    form.append("hue", $("#spriteFxHue").value);
+
+    const endpoint =
+      operation === "edge"
+        ? "/api/image/edge-fix"
+        : operation === "normal"
+          ? "/api/image/normal-map"
+          : operation === "mask"
+            ? "/api/image/mask-map"
+            : "/api/image/stylize";
+    if (!["edge", "normal", "mask"].includes(operation)) form.append("operation", operation);
+    apiDownload(endpoint, form, `${operation}.png`, "spriteFxStatus").catch((error) =>
+      setText("spriteFxStatus", error.message),
+    );
+  });
+
+  $("#runAnimationExport")?.addEventListener("click", () => {
+    const form = new FormData();
+    appendFiles(form, "frames", selectedFiles("animationInput"));
+    form.append("fps", $("#animationFpsExport").value);
+    form.append("format", $("#animationFormat").value);
+    apiDownload("/api/sequence/animation", form, `animation.${$("#animationFormat").value}`, "pipelineReport").catch((error) =>
+      setText("pipelineReport", error.message),
+    );
+  });
+
+  $("#runNineSlice")?.addEventListener("click", () => {
+    const [file] = selectedFiles("gridToolInput");
+    const form = new FormData();
+    form.append("image", file, file.name);
+    form.append("left", $("#gridA").value);
+    form.append("right", $("#gridB").value);
+    form.append("top", $("#gridC").value);
+    form.append("bottom", $("#gridD").value);
+    apiDownload("/api/ui/nine-slice", form, "nine-slice.zip", "pipelineReport").catch((error) =>
+      setText("pipelineReport", error.message),
+    );
+  });
+
+  $("#runTileset")?.addEventListener("click", () => {
+    const [file] = selectedFiles("gridToolInput");
+    const form = new FormData();
+    form.append("image", file, file.name);
+    form.append("tileWidth", $("#gridA").value);
+    form.append("tileHeight", $("#gridB").value);
+    form.append("dedupe", "true");
+    apiDownload("/api/tileset/slice", form, "tileset.zip", "pipelineReport").catch((error) =>
+      setText("pipelineReport", error.message),
+    );
+  });
+
+  $("#runQualityReport")?.addEventListener("click", () => {
+    const form = new FormData();
+    appendFiles(form, "images", selectedFiles("qualityInput"));
+    setText("pipelineReport", "质检中...");
+    apiJson("/api/quality/report", form)
+      .then((report) => {
+        setText("pipelineReport", JSON.stringify(report, null, 2));
+        setStatus(`质检完成：${report.count} 个文件，${report.issues.length} 个问题`);
+      })
+      .catch((error) => setText("pipelineReport", error.message));
+  });
+
+  $("#runBatchColor")?.addEventListener("click", () => {
+    const form = new FormData();
+    appendFiles(form, "images", selectedFiles("qualityInput"));
+    form.append("brightness", $("#batchColorBrightness").value);
+    form.append("saturation", $("#batchColorSaturation").value);
+    form.append("hue", $("#batchColorHue").value);
+    apiDownload("/api/batch/color", form, "batch-color.zip", "pipelineReport").catch((error) =>
+      setText("pipelineReport", error.message),
+    );
+  });
+
+  $("#runAudio")?.addEventListener("click", () => {
+    const [file] = selectedFiles("audioInput");
+    const form = new FormData();
+    form.append("audio", file, file.name);
+    form.append("operation", $("#audioOperation").value);
+    form.append("format", $("#audioFormat").value);
+    form.append("bitrate", $("#audioBitrate").value);
+    apiDownload("/api/audio/process", form, `audio.${$("#audioFormat").value}`, "audioStatus").catch((error) =>
+      setText("audioStatus", error.message),
+    );
+  });
+}
+
 function boot() {
   setupTheme();
+  setupRankingWindow();
   setupTabs();
   setupChromaTool();
   setupResizeTool();
@@ -2438,6 +3554,7 @@ function boot() {
   setupPixelEditorTool();
   setupSequenceTool();
   setupAtlasSliceTool();
+  setupExtendedTools();
   renderFrames();
 }
 

@@ -89,6 +89,7 @@ http://127.0.0.1:5181/health
 | `slice_atlas_boxes` | 按自定义 `{x,y,w,h}` 框切割图集 |
 | `extract_video_frames` | 视频抽帧 |
 | `chroma_key_video` | 视频逐帧抠背景 |
+| `extract_unity_apk` | Unity APK 工程还原、资源提取或 IL2CPP 结构分析 |
 
 ## 调用示例
 
@@ -137,3 +138,32 @@ MCP 层只负责：
 - 返回结构化结果。
 
 这样后续新增算法时，只需要先补 API，再在 MCP 层加一个轻量 wrapper。
+## 新增 MCP 工具
+
+新增功能也提供 MCP 入口，适合让 Agent 直接处理本地文件路径：
+
+- `convert_image`
+- `pack_atlas_enhanced`
+- `sprite_fx_image`
+- `export_sequence_animation`
+- `nine_slice_image`
+- `slice_tileset`
+- `quality_report_images`
+- `batch_color_adjust`
+- `process_audio`
+- `extract_unity_apk`
+
+这些工具默认把结果写入 `outputs/`，也可以传入 `outputPath` 或 `outputDir` 指定输出位置。
+
+`extract_unity_apk` 支持 `mode=project/assets/raw/code` 和 `runMode=quick/expert`。快速模式会优先检测 `tools/external/` 内置工具；专家模式可传入 `commandTemplate` 或 `toolArgs`，并使用 `{input}`、`{inputDir}`、`{dataDir}`、`{output}` 等占位符：
+
+```json
+{
+  "apkPath": "D:\\builds\\game.apk",
+  "mode": "project",
+  "runMode": "expert",
+  "tool": "assetripper",
+  "commandTemplate": "\"C:\\Tools\\AssetRipper\\AssetRipper.CLI.exe\" \"{input}\" \"{output}\"",
+  "outputDir": "D:\\builds\\inspect"
+}
+```

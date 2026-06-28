@@ -8,6 +8,9 @@
     "api": "node server/index.js",
     "mcp": "node mcp/server.js",
     "start": "node server/index.js",
+    "postinstall": "node scripts/install-unity-tools.js",
+    "install-tools": "node scripts/install-unity-tools.js",
+    "unity-tools": "node scripts/check-unity-tools.js",
     "check": "node scripts/smoke-check.js"
   },
   "keywords": [
