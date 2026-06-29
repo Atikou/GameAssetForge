@@ -80,9 +80,10 @@ http://127.0.0.1:5181/health
 | `resize_image` | 图片改分辨率 |
 | `trim_transparent_edges` | 自动裁透明边，返回 offset 元数据 |
 | `pixel_scale_image` | 像素风最近邻放大 / 缩小 |
+| `true_pixel_image` | AI 伪像素图转真实硬边像素 PNG |
 | `interpolate_images` | 两帧图片生成中间帧 |
 | `build_atlas` | 多图合成图集 ZIP |
-| `batch_process_images` | 批量裁透明边或像素缩放 |
+| `batch_process_images` | 批量裁透明边、像素缩放、扣背景或真像素化 |
 | `rename_sequence` | 序列帧排序和重命名 |
 | `slice_atlas` | 未知图集按网格切割 |
 | `auto_slice_atlas` | 自动识别透明背景、纯色背景或规则网格图集并切割 |

@@ -251,6 +251,7 @@ async function buildUnityApkExtractZip(file, body = {}, progress) {
       unpackedDir,
       analysis,
       sourceName: file.originalname,
+      body,
       progress,
       timeoutMs,
     });

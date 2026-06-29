@@ -52,6 +52,34 @@ function registerExtendedTools(server) {
   );
 
   server.registerTool(
+    "true_pixel_image",
+    {
+      title: "AI 伪像素转真像素",
+      description: "把 AI 生成的柔边伪像素图重采样成真实像素网格，并输出硬边 PNG。",
+      inputSchema: {
+        imagePath: z.string(),
+        outputPath: z.string().optional(),
+        outputDir: z.string().optional(),
+        cellSize: z.number().min(1).max(64).default(4),
+        outputScale: z.number().min(1).max(32).default(4),
+        colors: z.number().min(2).max(256).default(192),
+        sharpen: z.number().min(0).max(100).default(25),
+        sampleKernel: z.enum(["cubic", "nearest"]).default("cubic"),
+        dither: z.number().min(0).max(1).default(0),
+      },
+    },
+    async (args) =>
+      callSingleImageTool("/api/image/true-pixel", args, "true-pixel.png", {
+        cellSize: args.cellSize,
+        outputScale: args.outputScale,
+        colors: args.colors,
+        sharpen: args.sharpen,
+        sampleKernel: args.sampleKernel,
+        dither: args.dither,
+      }),
+  );
+
+  server.registerTool(
     "pack_atlas_enhanced",
     {
       title: "增强图集打包",
@@ -638,15 +666,29 @@ function registerTools(server) {
     "batch_process_images",
     {
       title: "批量处理图片",
-      description: "批量裁透明边或像素缩放，输出 ZIP 和 manifest.json。",
+      description: "批量裁透明边、像素缩放、扣背景或真像素化，输出 ZIP 和 manifest.json。",
       inputSchema: {
         imagePaths: z.array(z.string()).min(1),
         outputPath: z.string().optional(),
         outputDir: z.string().optional(),
-        operation: z.enum(["trim", "pixelScale"]).default("trim"),
+        operation: z.enum(["trim", "pixelScale", "chromaKey", "truePixel"]).default("trim"),
         alphaThreshold: z.number().min(0).max(255).default(8),
         padding: z.number().min(0).max(4096).default(0),
         factor: z.number().min(0.1).max(16).default(2),
+        color: z.string().default("#00ff00"),
+        preset: z.string().optional(),
+        tolerance: z.number().min(0).max(441).default(72),
+        softness: z.number().min(0).max(441).default(18),
+        spill: z.number().min(0).max(100).default(85),
+        edgeCleanup: z.number().min(0).max(100).default(18),
+        mattingStrength: z.number().min(0).max(100).default(70),
+        mattingRadius: z.number().min(1).max(32).default(4),
+        cellSize: z.number().min(1).max(64).default(4),
+        outputScale: z.number().min(1).max(32).default(4),
+        colors: z.number().min(2).max(256).default(192),
+        sharpen: z.number().min(0).max(100).default(25),
+        sampleKernel: z.enum(["cubic", "nearest"]).default("cubic"),
+        dither: z.number().min(0).max(1).default(0),
       },
     },
     async (args) => {
@@ -659,6 +701,20 @@ function registerTools(server) {
           alphaThreshold: args.alphaThreshold,
           padding: args.padding,
           factor: args.factor,
+          color: args.color,
+          preset: args.preset,
+          tolerance: args.tolerance,
+          softness: args.softness,
+          spill: args.spill,
+          edgeCleanup: args.edgeCleanup,
+          mattingStrength: args.mattingStrength,
+          mattingRadius: args.mattingRadius,
+          cellSize: args.cellSize,
+          outputScale: args.outputScale,
+          colors: args.colors,
+          sharpen: args.sharpen,
+          sampleKernel: args.sampleKernel,
+          dither: args.dither,
         },
         args.imagePaths.map((filePath) => ({ field: "images", path: filePath })),
         outputPath,

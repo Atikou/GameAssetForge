@@ -166,6 +166,12 @@
                   <small>最近邻 / 整数倍</small>
                 </span>
               </button>
+              <button class="tab-button" type="button" data-panel="truePixelPanel">
+                <span class="tab-button-content">
+                  <span>真像素化</span>
+                  <small>AI 伪像素 / 硬边重采样</small>
+                </span>
+              </button>
               <button class="tab-button" type="button" data-panel="pixelEditorPanel">
                 <span class="tab-button-content">
                   <span>像素编辑</span>
@@ -349,6 +355,10 @@
                     <p>确认右侧透明预览后导出 PNG。</p>
                   </div>
                 </div>
+                <label class="field compact">
+                  <span>预览底色</span>
+                  <input id="chromaPreviewBackground" type="color" value="#101827" aria-label="透明结果预览底色" />
+                </label>
                 <button id="downloadChroma" class="primary-button wide" type="button" disabled>导出 PNG</button>
               </section>
             </div>
@@ -359,7 +369,7 @@
                   <figcaption>原图</figcaption>
                   <canvas id="chromaSourceCanvas"></canvas>
                 </figure>
-                <figure class="checkerboard">
+                <figure class="checkerboard chroma-result-preview is-solid-preview" id="chromaResultPreview">
                   <figcaption>透明结果</figcaption>
                   <canvas id="chromaResultCanvas"></canvas>
                 </figure>
@@ -738,7 +748,7 @@
                   <span>2</span>
                   <div>
                     <h3>处理规则</h3>
-                    <p>当前先覆盖最常用的裁透明边和像素整数倍缩放。</p>
+                    <p>可批量裁边、像素缩放、扣背景或真像素化。</p>
                   </div>
                 </div>
                 <label class="field">
@@ -746,16 +756,85 @@
                   <select id="batchOperation">
                     <option value="trim">自动裁透明边</option>
                     <option value="pixelScale">像素风整数倍放大</option>
+                    <option value="chromaKey">批量扣背景</option>
+                    <option value="truePixel">AI 伪像素转真像素</option>
                   </select>
                 </label>
-                <div class="field-grid">
+                <div class="field-grid mode-fields" data-batch-fields="trim">
                   <label class="field">
                     <span>透明阈值</span>
                     <input id="batchTrimAlpha" type="number" min="0" max="255" value="8" />
                   </label>
                   <label class="field">
+                    <span>裁边留白</span>
+                    <input id="batchTrimPadding" type="number" min="0" max="4096" value="0" />
+                  </label>
+                </div>
+                <div class="field-grid mode-fields hidden" data-batch-fields="pixelScale">
+                  <label class="field">
                     <span>像素倍数</span>
                     <input id="batchScaleFactor" type="number" min="1" max="16" value="2" />
+                  </label>
+                </div>
+                <div class="field-grid mode-fields hidden" data-batch-fields="chromaKey">
+                  <label class="field">
+                    <span>背景色</span>
+                    <select id="batchChromaPreset">
+                      <option value="#00ff00">绿幕背景</option>
+                      <option value="#ff00ff">品红背景</option>
+                      <option value="#006bff">蓝色背景</option>
+                      <option value="auto">自动四角取色</option>
+                      <option value="custom">自定义颜色</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>自定义颜色</span>
+                    <input id="batchChromaColor" type="color" value="#00ff00" />
+                  </label>
+                  <label class="field">
+                    <span>容差</span>
+                    <input id="batchChromaTolerance" type="number" min="0" max="180" value="72" />
+                  </label>
+                  <label class="field">
+                    <span>柔边</span>
+                    <input id="batchChromaSoftness" type="number" min="0" max="100" value="18" />
+                  </label>
+                  <label class="field">
+                    <span>去色边</span>
+                    <input id="batchChromaSpill" type="number" min="0" max="100" value="85" />
+                  </label>
+                  <label class="field">
+                    <span>边缘清理</span>
+                    <input id="batchChromaEdgeCleanup" type="number" min="0" max="100" value="18" />
+                  </label>
+                </div>
+                <div class="field-grid mode-fields hidden" data-batch-fields="truePixel">
+                  <label class="field">
+                    <span>网格块尺寸</span>
+                    <input id="batchTruePixelCellSize" type="number" min="1" max="64" value="4" />
+                  </label>
+                  <label class="field">
+                    <span>导出倍率</span>
+                    <input id="batchTruePixelOutputScale" type="number" min="1" max="32" value="4" />
+                  </label>
+                  <label class="field">
+                    <span>调色板颜色</span>
+                    <input id="batchTruePixelColors" type="number" min="2" max="256" value="192" />
+                  </label>
+                  <label class="field">
+                    <span>锐化</span>
+                    <input id="batchTruePixelSharpen" type="number" min="0" max="100" value="25" />
+                  </label>
+                  <label class="field">
+                    <span>采样方式</span>
+                    <select id="batchTruePixelKernel">
+                      <option value="cubic" selected>柔和重采样</option>
+                      <option value="nearest">硬采样</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>抖动</span>
+                    <input id="batchTruePixelDither" type="number" min="0" max="1" step="0.05" value="0" />
                   </label>
                 </div>
               </section>
@@ -879,6 +958,75 @@
                 <figure class="pixel-preview">
                   <figcaption id="pixelScaleResultLabel">缩放结果</figcaption>
                   <canvas id="pixelScaleResultCanvas"></canvas>
+                </figure>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel" id="truePixelPanel">
+          <div class="panel-heading">
+            <div>
+              <h2>AI 伪像素转真像素</h2>
+              <p>把 AI 生成图重新采样到像素网格，压缩调色板并最近邻放大，输出真正硬边的像素 PNG。</p>
+            </div>
+            <div class="panel-actions">
+              <span class="panel-tag">Pixelize</span>
+              <button class="back-to-overview" type="button">返回说明</button>
+            </div>
+          </div>
+
+          <div class="workflow-layout">
+            <div class="control-column">
+              <section class="step-card">
+                <label class="file-button wide file-dropzone true-pixel-dropzone" id="truePixelDropzone">
+                  <input id="truePixelInput" type="file" accept="image/*" />
+                  <span>选择 AI 像素图 / 拖入图片</span>
+                </label>
+                <div class="field-grid">
+                  <label class="field">
+                    <span>网格块尺寸</span>
+                    <input id="truePixelCellSize" type="number" min="1" max="64" value="4" />
+                  </label>
+                  <label class="field">
+                    <span>导出倍率</span>
+                    <input id="truePixelOutputScale" type="number" min="1" max="32" value="4" />
+                  </label>
+                  <label class="field">
+                    <span>调色板颜色</span>
+                    <input id="truePixelColors" type="number" min="2" max="256" value="192" />
+                  </label>
+                  <label class="field">
+                    <span>锐化</span>
+                    <input id="truePixelSharpen" type="number" min="0" max="100" value="25" />
+                  </label>
+                  <label class="field">
+                    <span>采样方式</span>
+                    <select id="truePixelKernel">
+                      <option value="cubic" selected>柔和重采样</option>
+                      <option value="nearest">硬采样</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>抖动</span>
+                    <input id="truePixelDither" type="number" min="0" max="1" step="0.05" value="0" />
+                  </label>
+                </div>
+              </section>
+              <section class="step-card action-card">
+                <button id="downloadTruePixel" class="primary-button wide" type="button" disabled>导出真像素 PNG</button>
+                <pre class="metadata-box" id="truePixelStatus">等待选择图片...</pre>
+              </section>
+            </div>
+            <div class="preview-column">
+              <div class="canvas-row">
+                <figure class="pixel-preview">
+                  <figcaption>原图</figcaption>
+                  <canvas id="truePixelSourceCanvas"></canvas>
+                </figure>
+                <figure class="pixel-preview show-grid">
+                  <figcaption id="truePixelResultLabel">真像素结果</figcaption>
+                  <canvas id="truePixelResultCanvas"></canvas>
                 </figure>
               </div>
             </div>

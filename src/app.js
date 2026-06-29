@@ -18,6 +18,11 @@ const state = {
   trimImage: null,
   trimMetadata: null,
   pixelScaleImage: null,
+  truePixelFile: null,
+  truePixelImage: null,
+  truePixelBlob: null,
+  truePixelMetadata: null,
+  truePixelToken: 0,
   sequenceItems: [],
   atlasSliceImage: null,
   atlasSlices: [],
@@ -103,6 +108,16 @@ const toolMeta = {
     inputDesc: "导入小尺寸图标、角色帧、tile 或 UI 像素图。",
     output: "PNG",
     outputDesc: "按倍数输出最近邻缩放后的清晰像素图。",
+  },
+  truePixelPanel: {
+    name: "真像素化",
+    desc: "把 AI 生成的伪像素图重采样成真实像素网格，去掉柔边和半像素渐变。",
+    use: "AI 像素图清理",
+    useDesc: "适合把高分辨率 AI 像素风角色、道具或背景转成可进引擎的硬边像素素材。",
+    input: "AI 生成图片",
+    inputDesc: "导入 PNG、JPG、WebP 等图片，工具会按网格块重新采样。",
+    output: "真像素 PNG",
+    outputDesc: "输出低色数、最近邻放大的 PNG，每个像素块都是硬边色块。",
   },
   pixelEditorPanel: {
     name: "像素编辑",
@@ -212,8 +227,8 @@ const toolGroups = [
   },
   {
     name: "像素制作",
-    desc: "小尺寸像素图修补、绘制和透明 PNG 导出。",
-    panels: ["pixelEditorPanel"],
+    desc: "AI 伪像素清理、小尺寸像素图修补、绘制和透明 PNG 导出。",
+    panels: ["truePixelPanel", "pixelEditorPanel"],
   },
   {
     name: "动画帧",
@@ -261,6 +276,64 @@ function loadImageFromFile(file) {
       reject(new Error("Image could not be loaded."));
     };
     image.src = url;
+  });
+}
+
+function loadImageFromBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const url = URL.createObjectURL(blob);
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Image could not be loaded."));
+    };
+    image.src = url;
+  });
+}
+
+function isImageInputFile(file) {
+  return Boolean(file && (file.type?.startsWith("image/") || /\.(png|jpe?g|webp|gif|avif|bmp)$/i.test(file.name || "")));
+}
+
+function bindFileDropzone(dropzone, options = {}) {
+  if (!dropzone) return;
+  const acceptFile = options.acceptFile || (() => true);
+  const leave = () => dropzone.classList.remove("is-drag-over");
+  ["dragenter", "dragover"].forEach((eventName) => {
+    dropzone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      dropzone.classList.add("is-drag-over");
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    });
+  });
+  ["dragleave", "dragend"].forEach((eventName) => {
+    dropzone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      leave();
+    });
+  });
+  dropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    leave();
+    const file = [...(event.dataTransfer?.files || [])].find(acceptFile);
+    if (!file) {
+      if (typeof options.onInvalid === "function") options.onInvalid();
+      return;
+    }
+    Promise.resolve(options.onFile?.(file)).catch((error) => {
+      if (typeof options.onError === "function") {
+        options.onError(error);
+      } else {
+        console.error(error);
+      }
+    });
   });
 }
 
@@ -386,17 +459,17 @@ function boxFilterFloat(values, width, height, radius) {
   return output;
 }
 
-function guidedFilterAlpha(data, width, height, alpha, radius, epsilon) {
+function guidedFilterAlphaSingleChannel(data, width, height, alpha, radius, epsilon, guideSelector) {
   const count = width * height;
   const guide = new Float32Array(count);
   const guideAlpha = new Float32Array(count);
   const guideGuide = new Float32Array(count);
   for (let pixel = 0; pixel < count; pixel += 1) {
     const i = pixel * 4;
-    const luminance = (data[i] * 0.2126 + data[i + 1] * 0.7152 + data[i + 2] * 0.0722) / 255;
-    guide[pixel] = luminance;
-    guideAlpha[pixel] = luminance * alpha[pixel];
-    guideGuide[pixel] = luminance * luminance;
+    const guideValue = guideSelector(data[i], data[i + 1], data[i + 2]);
+    guide[pixel] = guideValue;
+    guideAlpha[pixel] = guideValue * alpha[pixel];
+    guideGuide[pixel] = guideValue * guideValue;
   }
   const meanGuide = boxFilterFloat(guide, width, height, radius);
   const meanAlpha = boxFilterFloat(alpha, width, height, radius);
@@ -415,6 +488,26 @@ function guidedFilterAlpha(data, width, height, alpha, radius, epsilon) {
   const output = new Float32Array(count);
   for (let i = 0; i < count; i += 1) {
     output[i] = Math.max(0, Math.min(1, meanA[i] * guide[i] + meanB[i]));
+  }
+  return output;
+}
+
+function guidedFilterAlpha(data, width, height, alpha, radius, epsilon) {
+  const luma = guidedFilterAlphaSingleChannel(
+    data,
+    width,
+    height,
+    alpha,
+    radius,
+    epsilon,
+    (r, g, b) => (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255,
+  );
+  const red = guidedFilterAlphaSingleChannel(data, width, height, alpha, radius, epsilon, (r) => r / 255);
+  const green = guidedFilterAlphaSingleChannel(data, width, height, alpha, radius, epsilon, (r, g) => g / 255);
+  const blue = guidedFilterAlphaSingleChannel(data, width, height, alpha, radius, epsilon, (r, g, b) => b / 255);
+  const output = new Float32Array(alpha.length);
+  for (let i = 0; i < output.length; i += 1) {
+    output[i] = Math.max(0, Math.min(1, luma[i] * 0.52 + red[i] * 0.16 + green[i] * 0.16 + blue[i] * 0.16));
   }
   return output;
 }
@@ -438,6 +531,34 @@ function refineAlphaWithAutoTrimap(data, width, height, alpha, distance, options
     }
   }
   return output;
+}
+
+function decontaminateEdgeColors(data, key, refinedAlpha, distance, options) {
+  const spill = Math.max(0, Math.min(1, Number(options.spill ?? 85) / 100));
+  if (spill <= 0) return;
+  const spillRange = Math.max(1, options.tolerance + options.softness * 2 + 24);
+
+  for (let i = 0, pixel = 0; i < data.length; i += 4, pixel += 1) {
+    const alpha = refinedAlpha[pixel];
+    if (alpha <= 0.01) continue;
+    const nearKey = Math.max(0, 1 - distance[pixel] / spillRange);
+    const edgeMask = Math.max(1 - alpha, nearKey * 0.6);
+    const blend = Math.min(0.92, spill * edgeMask);
+    if (blend <= 0) continue;
+
+    const safeAlpha = Math.max(0.08, alpha);
+    const recoveredR = (data[i] - key.r * (1 - safeAlpha)) / safeAlpha;
+    const recoveredG = (data[i + 1] - key.g * (1 - safeAlpha)) / safeAlpha;
+    const recoveredB = (data[i + 2] - key.b * (1 - safeAlpha)) / safeAlpha;
+    data[i] = clampChannel(data[i] * (1 - blend) + recoveredR * blend);
+    data[i + 1] = clampChannel(data[i + 1] * (1 - blend) + recoveredG * blend);
+    data[i + 2] = clampChannel(data[i + 2] * (1 - blend) + recoveredB * blend);
+
+    const suppressed = suppressDominantSpill(data[i], data[i + 1], data[i + 2], key, spill, nearKey);
+    data[i] = suppressed.r;
+    data[i + 1] = suppressed.g;
+    data[i + 2] = suppressed.b;
+  }
 }
 
 function applyChromaToImageData(imageData, keyColor, tolerance, softness, options = {}) {
@@ -490,6 +611,11 @@ function applyChromaToImageData(imageData, keyColor, tolerance, softness, option
   const refinedAlpha = refineAlphaWithAutoTrimap(data, imageData.width, imageData.height, alpha, distanceMap, {
     ...options,
     fadeStart,
+    tolerance,
+    softness,
+  });
+  decontaminateEdgeColors(data, key, refinedAlpha, distanceMap, {
+    ...options,
     tolerance,
     softness,
   });
@@ -895,6 +1021,13 @@ function applyChromaKey() {
   setStatus(`已处理 ${result.width}x${result.height}`);
 }
 
+function updateChromaPreviewBackground() {
+  const preview = $("#chromaResultPreview");
+  const input = $("#chromaPreviewBackground");
+  if (!preview || !input) return;
+  preview.style.setProperty("--chroma-preview-background", input.value || "#101827");
+}
+
 function updateResizeControls() {
   const mode = $("#resizeMode").value;
   $("#resizeWidth").disabled = mode !== "exact";
@@ -1256,29 +1389,123 @@ function renderAssetList(container, items, options = {}) {
   });
 }
 
+function batchChromaKeyFromControls() {
+  const preset = $("#batchChromaPreset").value;
+  if (preset === "auto") return "auto";
+  return hexToRgb(preset === "custom" ? $("#batchChromaColor").value : preset);
+}
+
+function imageToCanvas(image) {
+  const canvas = document.createElement("canvas");
+  fitCanvasToImage(canvas, image);
+  return canvas;
+}
+
+function chromaKeyImageToCanvas(image) {
+  const canvas = imageToCanvas(image);
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  applyChromaToImageData(
+    imageData,
+    batchChromaKeyFromControls(),
+    Number($("#batchChromaTolerance").value),
+    Number($("#batchChromaSoftness").value),
+    {
+      spill: Number($("#batchChromaSpill").value),
+      edgeCleanup: Number($("#batchChromaEdgeCleanup").value),
+      mattingStrength: 70,
+      mattingRadius: 4,
+    },
+  );
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.putImageData(imageData, 0, 0);
+  return {
+    canvas,
+    metadata: {
+      width: canvas.width,
+      height: canvas.height,
+      tolerance: Number($("#batchChromaTolerance").value),
+      softness: Number($("#batchChromaSoftness").value),
+    },
+  };
+}
+
+async function truePixelFileToCanvas(file) {
+  const form = new FormData();
+  form.append("image", file, file.name);
+  form.append("cellSize", $("#batchTruePixelCellSize").value);
+  form.append("outputScale", $("#batchTruePixelOutputScale").value);
+  form.append("colors", $("#batchTruePixelColors").value);
+  form.append("sharpen", $("#batchTruePixelSharpen").value);
+  form.append("sampleKernel", $("#batchTruePixelKernel").value);
+  form.append("dither", $("#batchTruePixelDither").value);
+
+  const response = await fetch("/api/image/true-pixel", { method: "POST", body: form });
+  if (!response.ok) throw new Error(await response.text() || `Request failed: ${response.status}`);
+  const blob = await response.blob();
+  const encodedMeta = response.headers.get("X-GameAssetForge-Metadata") || "";
+  const metadata = encodedMeta ? JSON.parse(atob(encodedMeta)) : {};
+  const image = await loadImageFromBlob(blob);
+  const canvas = imageToCanvas(image);
+  return { canvas, metadata };
+}
+
+function updateBatchOperationFields() {
+  const operation = $("#batchOperation").value;
+  document.querySelectorAll("[data-batch-fields]").forEach((group) => {
+    group.classList.toggle("hidden", group.dataset.batchFields !== operation);
+  });
+}
+
 async function processBatchQueue() {
   const operation = $("#batchOperation").value;
   const alphaThreshold = Number($("#batchTrimAlpha").value);
+  const padding = Number($("#batchTrimPadding").value);
   const scaleFactor = Number($("#batchScaleFactor").value);
 
-  state.batchItems.forEach((item) => {
-    if (operation === "trim") {
-      const { canvas, metadata } = trimImageToCanvas(item.image, { alphaThreshold });
+  $("#processBatch").disabled = true;
+  $("#batchSummary").textContent = `正在处理 0 / ${state.batchItems.length} 张图片...`;
+
+  try {
+    for (const [index, item] of state.batchItems.entries()) {
+      $("#batchSummary").textContent = `正在处理 ${index + 1} / ${state.batchItems.length}: ${item.name}`;
+      if (operation === "trim") {
+        const { canvas, metadata } = trimImageToCanvas(item.image, { alphaThreshold, padding });
+        item.resultCanvas = canvas;
+        item.metadata = metadata;
+        item.resultName = replaceExtension(item.name, "-trim");
+        continue;
+      }
+      if (operation === "pixelScale") {
+        item.resultCanvas = pixelScaleImageToCanvas(item.image, scaleFactor);
+        item.metadata = {
+          originalWidth: item.image.naturalWidth || item.image.width,
+          originalHeight: item.image.naturalHeight || item.image.height,
+          width: item.resultCanvas.width,
+          height: item.resultCanvas.height,
+          scale: scaleFactor,
+        };
+        item.resultName = replaceExtension(item.name, `-x${scaleFactor}`);
+        continue;
+      }
+      if (operation === "chromaKey") {
+        const { canvas, metadata } = chromaKeyImageToCanvas(item.image);
+        item.resultCanvas = canvas;
+        item.metadata = metadata;
+        item.resultName = replaceExtension(item.name, "-keyed");
+        continue;
+      }
+      const { canvas, metadata } = await truePixelFileToCanvas(item.file);
       item.resultCanvas = canvas;
       item.metadata = metadata;
-      item.resultName = replaceExtension(item.name, "-trim");
-      return;
+      item.resultName = replaceExtension(item.name, "-true-pixel");
     }
-    item.resultCanvas = pixelScaleImageToCanvas(item.image, scaleFactor);
-    item.metadata = {
-      originalWidth: item.image.naturalWidth || item.image.width,
-      originalHeight: item.image.naturalHeight || item.image.height,
-      width: item.resultCanvas.width,
-      height: item.resultCanvas.height,
-      scale: scaleFactor,
-    };
-    item.resultName = replaceExtension(item.name, `-x${scaleFactor}`);
-  });
+  } catch (error) {
+    $("#batchSummary").textContent = error.message;
+    throw error;
+  } finally {
+    $("#processBatch").disabled = !state.batchItems.length;
+  }
 
   $("#downloadBatchAll").disabled = !state.batchItems.length;
   $("#batchSummary").textContent = `已处理 ${state.batchItems.length} 张图片。`;
@@ -1323,6 +1550,56 @@ function applyPixelScale() {
   copyCanvas(result, $("#pixelScaleResultCanvas"));
   $("#pixelScaleResultLabel").textContent = `缩放结果 ${result.width}x${result.height}`;
   $("#downloadPixelScale").disabled = false;
+}
+
+async function applyTruePixel() {
+  if (!state.truePixelFile || !state.truePixelImage) return;
+  const token = state.truePixelToken + 1;
+  state.truePixelToken = token;
+  state.truePixelBlob = null;
+  state.truePixelMetadata = null;
+  $("#downloadTruePixel").disabled = true;
+  fitCanvasToImage($("#truePixelSourceCanvas"), state.truePixelImage);
+  setText("truePixelStatus", "正在重采样像素网格...");
+
+  const form = new FormData();
+  form.append("image", state.truePixelFile, state.truePixelFile.name);
+  form.append("cellSize", $("#truePixelCellSize").value);
+  form.append("outputScale", $("#truePixelOutputScale").value);
+  form.append("colors", $("#truePixelColors").value);
+  form.append("sharpen", $("#truePixelSharpen").value);
+  form.append("sampleKernel", $("#truePixelKernel").value);
+  form.append("dither", $("#truePixelDither").value);
+
+  try {
+    const response = await fetch("/api/image/true-pixel", { method: "POST", body: form });
+    const blob = await response.blob();
+    if (!response.ok) {
+      throw new Error(await blob.text() || `Request failed: ${response.status}`);
+    }
+    if (token !== state.truePixelToken) return;
+    const encodedMeta = response.headers.get("X-GameAssetForge-Metadata") || "";
+    const metadata = encodedMeta ? JSON.parse(atob(encodedMeta)) : {};
+    const image = await loadImageFromBlob(blob);
+    if (token !== state.truePixelToken) return;
+    fitCanvasToImage($("#truePixelResultCanvas"), image);
+    state.truePixelBlob = blob;
+    state.truePixelMetadata = metadata;
+    $("#truePixelResultLabel").textContent = `真像素结果 ${metadata.width || image.width}x${metadata.height || image.height}`;
+    $("#downloadTruePixel").disabled = false;
+    setText(
+      "truePixelStatus",
+      [
+        `原图: ${metadata.originalWidth || 0}x${metadata.originalHeight || 0}`,
+        `像素网格: ${metadata.lowWidth || 0}x${metadata.lowHeight || 0}`,
+        `输出: ${metadata.width || 0}x${metadata.height || 0}`,
+        `块尺寸: ${metadata.cellSize || "-"} / 倍率: ${metadata.outputScale || "-"}`,
+        `调色板: ${metadata.colors || "-"} 色 / 抖动: ${metadata.dither ?? "-"}`,
+      ].join("\n"),
+    );
+  } catch (error) {
+    if (token === state.truePixelToken) setText("truePixelStatus", error.message);
+  }
 }
 
 function createEditorCanvas(width = 32, height = 32) {
@@ -2585,6 +2862,7 @@ function setupRankingWindow() {
 }
 
 function setupChromaTool() {
+  updateChromaPreviewBackground();
   $("#chromaInput").addEventListener("change", async (event) => {
     const [file] = event.target.files;
     if (!file) return;
@@ -2604,6 +2882,7 @@ function setupChromaTool() {
       applyChromaKey();
     });
   });
+  $("#chromaPreviewBackground")?.addEventListener("input", updateChromaPreviewBackground);
 
   $("#eyedropperButton").addEventListener("click", () => {
     startEyedropper();
@@ -2750,12 +3029,13 @@ function setupVideoTool() {
 }
 
 function setupBatchTool() {
+  updateBatchOperationFields();
   $("#batchInput").addEventListener("change", async (event) => {
     state.batchItems = await Promise.all([...event.target.files].map(loadImageItem));
     renderBatchList();
   });
   $("#processBatch").addEventListener("click", () => {
-    processBatchQueue();
+    processBatchQueue().catch((error) => setStatus(error.message));
   });
   $("#downloadBatchAll").addEventListener("click", () => {
     state.batchItems.forEach((item) => {
@@ -2766,9 +3046,28 @@ function setupBatchTool() {
     state.batchItems = [];
     renderBatchList();
   });
-  ["batchOperation", "batchTrimAlpha", "batchScaleFactor"].forEach((id) => {
+  [
+    "batchOperation",
+    "batchTrimAlpha",
+    "batchTrimPadding",
+    "batchScaleFactor",
+    "batchChromaPreset",
+    "batchChromaColor",
+    "batchChromaTolerance",
+    "batchChromaSoftness",
+    "batchChromaSpill",
+    "batchChromaEdgeCleanup",
+    "batchTruePixelCellSize",
+    "batchTruePixelOutputScale",
+    "batchTruePixelColors",
+    "batchTruePixelSharpen",
+    "batchTruePixelKernel",
+    "batchTruePixelDither",
+  ].forEach((id) => {
     $(`#${id}`).addEventListener("input", () => {
-      if (state.batchItems.some((item) => item.resultCanvas)) processBatchQueue();
+      if (id === "batchOperation") updateBatchOperationFields();
+      if (id === "batchChromaColor") $("#batchChromaPreset").value = "custom";
+      if (state.batchItems.some((item) => item.resultCanvas)) processBatchQueue().catch((error) => setStatus(error.message));
     });
   });
   renderBatchList();
@@ -2809,6 +3108,34 @@ function setupPixelScaleTool() {
   });
   $("#downloadPixelScale").addEventListener("click", () => {
     downloadCanvas($("#pixelScaleResultCanvas"), "pixel-scaled.png");
+  });
+}
+
+function setupTruePixelTool() {
+  const handleTruePixelError = (error) => setText("truePixelStatus", error.message);
+  const useTruePixelFile = async (file) => {
+    if (!file) return;
+    state.truePixelFile = file;
+    state.truePixelImage = await loadImageFromFile(file);
+    applyTruePixel();
+  };
+  $("#truePixelInput").addEventListener("change", async (event) => {
+    const [file] = event.target.files;
+    useTruePixelFile(file).catch(handleTruePixelError);
+  });
+  bindFileDropzone($("#truePixelDropzone"), {
+    acceptFile: isImageInputFile,
+    onFile: useTruePixelFile,
+    onInvalid: () => setText("truePixelStatus", "请拖入 PNG、JPG、WebP、GIF、AVIF 或 BMP 图片。"),
+    onError: handleTruePixelError,
+  });
+  ["truePixelCellSize", "truePixelOutputScale", "truePixelColors", "truePixelSharpen", "truePixelKernel", "truePixelDither"].forEach((id) => {
+    $(`#${id}`).addEventListener("input", () => {
+      applyTruePixel();
+    });
+  });
+  $("#downloadTruePixel").addEventListener("click", () => {
+    if (state.truePixelBlob) downloadBlob(state.truePixelBlob, "true-pixel.png");
   });
 }
 
@@ -2998,11 +3325,12 @@ function setupExtendedTools() {
   bindFileState("audioInput", ["runAudio"], "audioStatus", "已选择音频");
 
   const renderUnityToolchain = (status) => {
+    const stateLabel = (tool) => (tool.automationAvailable ? "OK" : tool.available ? "仅手动/专家模式" : "缺失");
     const lines = [`内置工具目录: ${status.externalRoot}`];
+    lines.push("", "资源/代码适配器:");
     status.tools.forEach((tool) => {
-      const state = tool.automationAvailable ? "OK" : tool.available ? "需专家模式" : "缺失";
       lines.push(
-        `${state} ${tool.label} (${tool.kind})`,
+        `${stateLabel(tool)} ${tool.label} (${tool.kind})`,
         `  用途: ${tool.purpose}`,
         `  目录: ${tool.directory}`,
         `  程序: ${tool.executable || tool.candidates.join(" / ")}`,
@@ -3013,7 +3341,14 @@ function setupExtendedTools() {
     if (status.restorePipeline) {
       lines.push("", "完整复原内置链路:");
       Object.entries(status.restorePipeline).forEach(([name, tool]) => {
-        lines.push(`${tool.available ? "OK" : "缺失"} ${name}: ${tool.path}`);
+        lines.push(
+          `${stateLabel(tool)} ${tool.label || name} (${name})`,
+          `  用途: ${tool.purpose || "-"}`,
+          `  路径: ${tool.path}`,
+        );
+        if (tool.cliPath) lines.push(`  CLI: ${tool.cliPath}`);
+        if (tool.guiPath) lines.push(`  GUI: ${tool.guiPath}`);
+        if (tool.warning) lines.push(`  注意: ${tool.warning}`);
       });
     }
     setText("unityApkStatus", lines.join("\n"));
@@ -3271,6 +3606,7 @@ function setupExtendedTools() {
         `  总文件: ${summary.totalEntries || 0}`,
         `  资源导出: ${summary.toolOutputEntries || 0}`,
         `  Unity 工程: ${summary.unityProjectEntries || 0}`,
+        `  AssetRipper 工程: ${summary.assetRipperEntries || 0}`,
         `  Java 代码: ${summary.javaEntries || 0}`,
         `  原始结构: ${summary.rawEntries || 0}`,
         `  模式/工具: ${summary.modeLabel || summary.mode || "-"} / ${summary.tool || "-"}`,
@@ -3278,6 +3614,7 @@ function setupExtendedTools() {
       if (summary.restoreSummary?.counts) {
         const counts = summary.restoreSummary.counts;
         const recovery = summary.restoreSummary.recovery || {};
+        const quality = summary.restoreSummary.quality;
         lines.push(
           "",
           "完整复原摘要:",
@@ -3287,6 +3624,19 @@ function setupExtendedTools() {
           `  metadata: ${recovery.metadataCopied ? "已复制" : "未复制"}`,
           `  libil2cpp.so: ${recovery.libil2cppFound ? "已检测到" : "未检测到"}`,
         );
+        if (quality) {
+          lines.push(
+            "",
+            "恢复质量:",
+            `  等级: ${quality.label || quality.tier || "-"}`,
+            `  分数: ${quality.score ?? "-"} / 100`,
+            `  结论: ${quality.summary || "-"}`,
+          );
+          if ((quality.missing || []).length) {
+            lines.push("  缺失/受限:");
+            quality.missing.slice(0, 6).forEach((item) => lines.push(`    - ${item}`));
+          }
+        }
       }
       if (summary.resourceExport) {
         lines.push(
@@ -3551,6 +3901,7 @@ function boot() {
   setupBatchTool();
   setupTrimTool();
   setupPixelScaleTool();
+  setupTruePixelTool();
   setupPixelEditorTool();
   setupSequenceTool();
   setupAtlasSliceTool();

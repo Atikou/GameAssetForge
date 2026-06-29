@@ -10,6 +10,7 @@ const {
   maskMapImage,
   trimTransparent,
   pixelScaleImage,
+  truePixelImage,
   interpolateImages,
 } = require("../tools/image");
 
@@ -99,6 +100,16 @@ function registerImageRoutes(app, upload) {
       const { output, metadata } = await pixelScaleImage(requireFile(req).buffer, req.body);
       res.setHeader("X-GameAssetForge-Metadata", Buffer.from(JSON.stringify(metadata)).toString("base64"));
       pngResponse(res, output, "pixel-scaled-image.png");
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/image/true-pixel", upload.single("image"), async (req, res, next) => {
+    try {
+      const { output, metadata } = await truePixelImage(requireFile(req).buffer, req.body);
+      res.setHeader("X-GameAssetForge-Metadata", Buffer.from(JSON.stringify(metadata)).toString("base64"));
+      pngResponse(res, output, "true-pixel-image.png");
     } catch (error) {
       next(error);
     }

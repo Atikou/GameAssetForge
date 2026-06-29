@@ -16,6 +16,10 @@ const requiredFiles = [
   "server/routes/index.js",
   "server/routes/rankings.routes.js",
   "server/tools/image.js",
+  "server/tools/image/background.js",
+  "server/tools/image/transform.js",
+  "server/tools/image/pixel.js",
+  "server/tools/image/effects.js",
   "server/tools/atlas.js",
   "server/tools/batch.js",
   "server/tools/sequence.js",
@@ -79,6 +83,8 @@ for (const id of [
   "overviewDesc",
   "enterToolButton",
   "chromaInput",
+  "chromaPreviewBackground",
+  "chromaResultPreview",
   "resizeInput",
   "interpolateAInput",
   "interpolateBInput",
@@ -92,11 +98,31 @@ for (const id of [
   "videoChromaEnabled",
   "videoKeyPreset",
   "batchInput",
+  "batchOperation",
+  "batchTrimAlpha",
+  "batchTrimPadding",
+  "batchScaleFactor",
+  "batchChromaPreset",
+  "batchChromaColor",
+  "batchChromaTolerance",
+  "batchChromaSoftness",
+  "batchChromaSpill",
+  "batchChromaEdgeCleanup",
+  "batchTruePixelCellSize",
+  "batchTruePixelOutputScale",
+  "batchTruePixelColors",
+  "batchTruePixelSharpen",
+  "batchTruePixelKernel",
+  "batchTruePixelDither",
   "processBatch",
   "trimInput",
   "trimSourceCanvas",
   "pixelScaleInput",
   "pixelScaleResultCanvas",
+  "truePixelDropzone",
+  "truePixelInput",
+  "truePixelResultCanvas",
+  "downloadTruePixel",
   "pixelEditorFrame",
   "pixelEditorCanvas",
   "editorGridOverlay",
@@ -143,9 +169,15 @@ for (const id of [
 
 for (const route of [
   "/api/image/chroma-key",
+  "/api/image/convert",
   "/api/image/resize",
+  "/api/image/edge-fix",
+  "/api/image/stylize",
+  "/api/image/normal-map",
+  "/api/image/mask-map",
   "/api/image/trim-transparent",
   "/api/image/pixel-scale",
+  "/api/image/true-pixel",
   "/api/image/interpolate",
   "/api/batch/process",
   "/api/sequence/rename",
@@ -180,6 +212,7 @@ for (const tool of [
   "auto_slice_atlas",
   "extract_video_frames",
   "chroma_key_video",
+  "true_pixel_image",
   "extract_unity_apk",
 ]) {
   if (!mcpTree.includes(`"${tool}"`)) {
@@ -193,6 +226,26 @@ if (packageJson.scripts.mcp !== "node mcp/server.js") {
 
 if (!html.includes('class="back-to-overview"')) {
   throw new Error("Missing back-to-overview buttons");
+}
+
+const imageTools = require(path.join(root, "server/tools/image"));
+for (const imageExport of [
+  "convertImage",
+  "chromaKey",
+  "resizeImage",
+  "interpolateImages",
+  "trimTransparent",
+  "pixelScaleImage",
+  "truePixelImage",
+  "edgeFixImage",
+  "stylizeImage",
+  "normalMapImage",
+  "maskMapImage",
+  "colorAdjustImage",
+]) {
+  if (typeof imageTools[imageExport] !== "function") {
+    throw new Error(`Missing image tool export: ${imageExport}`);
+  }
 }
 
 for (const removedId of ["toolPrev", "toolNext"]) {

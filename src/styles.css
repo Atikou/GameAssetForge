@@ -1427,6 +1427,7 @@ figure,
   cursor: pointer;
 }
 
+.file-dropzone,
 .unity-apk-dropzone {
   min-height: 92px;
   border-style: dashed;
@@ -1435,10 +1436,16 @@ figure,
   text-align: center;
 }
 
+.true-pixel-dropzone {
+  min-height: 78px;
+}
+
+.file-dropzone span,
 .unity-apk-dropzone span {
   pointer-events: none;
 }
 
+.file-dropzone.is-drag-over,
 .unity-apk-dropzone.is-drag-over {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, var(--field));
@@ -1547,6 +1554,15 @@ canvas:empty {
     12px -12px,
     -12px 0;
   background-size: 24px 24px;
+}
+
+.chroma-result-preview {
+  --chroma-preview-background: #101827;
+  background-color: var(--chroma-preview-background);
+}
+
+.chroma-result-preview.is-solid-preview {
+  background-image: none;
 }
 
 video {

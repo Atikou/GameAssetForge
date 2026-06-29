@@ -128,6 +128,25 @@ Content-Type: multipart/form-data
 
 响应：使用最近邻算法处理后的 PNG 图片。
 
+## AI 伪像素转真像素
+
+```http
+POST /api/image/true-pixel
+Content-Type: multipart/form-data
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `image` | File | 是 | 无 | 输入 AI 生成的伪像素图 |
+| `cellSize` | number | 否 | `4` | 原图中多少像素重建为一个真实像素 |
+| `outputScale` | number | 否 | `cellSize` | 低分辨率像素图最近邻放大的倍率 |
+| `colors` | number | 否 | `192` | 调色板颜色数，范围 `2-256` |
+| `sharpen` | number | 否 | `25` | 降采样后的锐化强度，范围 `0-100` |
+| `sampleKernel` | string | 否 | `cubic` | `cubic` 或 `nearest` |
+| `dither` | number | 否 | `0` | 调色板抖动，范围 `0-1` |
+
+响应：真实像素网格 PNG。响应头 `X-GameAssetForge-Metadata` 包含原图尺寸、低分辨率网格尺寸、输出倍率和调色板参数。
+
 ## 图片插帧
 
 ```http
@@ -154,10 +173,21 @@ Content-Type: multipart/form-data
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- | --- |
 | `images` | File[] | 是 | 无 | 重复上传多个图片 |
-| `operation` | string | 否 | `trim` | `trim` 或 `pixelScale` |
+| `operation` | string | 否 | `trim` | `trim`、`pixelScale`、`chromaKey` 或 `truePixel` |
 | `alphaThreshold` | number | 否 | `8` | `trim` 使用 |
 | `padding` | number | 否 | `0` | `trim` 使用 |
 | `factor` | number | 否 | `2` | `pixelScale` 使用 |
+| `color` / `preset` | string | 否 | `#00ff00` | `chromaKey` 使用，支持 `auto` 或十六进制色 |
+| `tolerance` | number | 否 | `72` | `chromaKey` 背景色容差 |
+| `softness` | number | 否 | `18` | `chromaKey` 柔边范围 |
+| `spill` | number | 否 | `85` | `chromaKey` 去色边强度 |
+| `edgeCleanup` | number | 否 | `18` | `chromaKey` 边缘清理强度 |
+| `cellSize` | number | 否 | `4` | `truePixel` 像素网格块尺寸 |
+| `outputScale` | number | 否 | `4` | `truePixel` 导出倍率 |
+| `colors` | number | 否 | `192` | `truePixel` 调色板颜色数 |
+| `sharpen` | number | 否 | `25` | `truePixel` 锐化强度 |
+| `sampleKernel` | string | 否 | `cubic` | `truePixel` 使用 `cubic` 或 `nearest` |
+| `dither` | number | 否 | `0` | `truePixel` 抖动强度 |
 
 响应：ZIP，包含处理后的 PNG 和 `manifest.json`。
 
@@ -399,6 +429,7 @@ curl -X POST http://127.0.0.1:5180/api/unity/apk-extract \
 | 功能 | 接口 | 输入 | 输出 |
 | --- | --- | --- | --- |
 | 图片格式转换 / 压缩 | `POST /api/image/convert` | `image`，`format=png/webp/jpeg/avif`，`quality`，`maxSide`，`background` | 图片文件 |
+| AI 伪像素转真像素 | `POST /api/image/true-pixel` | `image`，`cellSize`，`outputScale`，`colors`，`sharpen`，`sampleKernel`，`dither` | PNG |
 | 透明边缘修复 | `POST /api/image/edge-fix` | `image`，`iterations`，`alphaThreshold` | PNG |
 | Sprite 描边 / 投影 / 调色 / 压色 | `POST /api/image/stylize` | `image`，`operation=outline/shadow/palette/color` 及对应参数 | PNG |
 | 法线图 | `POST /api/image/normal-map` | `image`，`strength` | PNG |
