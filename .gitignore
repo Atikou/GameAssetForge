@@ -2,7 +2,11 @@ node_modules/
 outputs/
 dist/
 build/
-tools/
+tools/external/*
+!tools/external/README.md
+!tools/external/unitypy/
+tools/external/unitypy/*
+!tools/external/unitypy/export_unitypy.py
 .DS_Store
 Thumbs.db
 *.log
