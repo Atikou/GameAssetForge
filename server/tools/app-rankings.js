@@ -1,19 +1,52 @@
 const DEFAULT_LIMIT = 50;
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const RRF_K = 60;
+const GLOBAL_COUNTRY = "global";
+const GLOBAL_CONCURRENCY = 6;
 
 const cache = new Map();
 
-const countries = [
-  { code: "us", label: "美国" },
-  { code: "jp", label: "日本" },
-  { code: "kr", label: "韩国" },
-  { code: "gb", label: "英国" },
-  { code: "de", label: "德国" },
-  { code: "fr", label: "法国" },
-  { code: "br", label: "巴西" },
-  { code: "in", label: "印度" },
+const countryCodes = [
+  "ad", "ae", "af", "ag", "ai", "al", "am", "ao", "ar", "at", "au", "az",
+  "ba", "bb", "bd", "be", "bf", "bg", "bh", "bj", "bm", "bn", "bo", "br", "bs", "bt", "bw", "by", "bz",
+  "ca", "cg", "ch", "ci", "cl", "cm", "cn", "co", "cr", "cv", "cy", "cz",
+  "de", "dk", "dm", "do", "dz",
+  "ec", "ee", "eg", "es",
+  "fi", "fj", "fm", "fr",
+  "gb", "gd", "gh", "gm", "gr", "gt", "gw", "gy",
+  "hk", "hn", "hr", "hu",
+  "id", "ie", "il", "in", "iq", "is", "it",
+  "jm", "jo", "jp",
+  "ke", "kg", "kh", "kn", "kr", "kw", "ky", "kz",
+  "la", "lb", "lc", "lk", "lr", "lt", "lu", "lv",
+  "md", "mg", "mk", "ml", "mn", "mo", "mr", "ms", "mt", "mu", "mv", "mw", "mx", "my", "mz",
+  "na", "ne", "ng", "ni", "nl", "no", "np", "nz",
+  "om",
+  "pa", "pe", "pg", "ph", "pk", "pl", "pt", "pw", "py",
+  "qa",
+  "ro", "rs", "ru", "rw",
+  "sa", "sb", "sc", "se", "sg", "si", "sk", "sl", "sn", "sr", "st", "sv", "sz",
+  "tc", "td", "th", "tj", "tm", "tn", "tr", "tt", "tw", "tz",
+  "ua", "ug", "us", "uy", "uz",
+  "vc", "ve", "vg", "vn",
+  "ye",
+  "za", "zm", "zw",
 ];
+
+const regionNames = new Intl.DisplayNames(["zh-Hans-CN"], { type: "region" });
+const preferredCountryOrder = ["us", "cn", "jp", "kr", "gb", "de", "fr", "br", "in"];
+const countries = countryCodes
+  .map((code) => ({ code, label: regionNames.of(code.toUpperCase()) || code.toUpperCase() }))
+  .sort((a, b) => {
+    const preferredA = preferredCountryOrder.indexOf(a.code);
+    const preferredB = preferredCountryOrder.indexOf(b.code);
+    if (preferredA >= 0 || preferredB >= 0) {
+      if (preferredA < 0) return 1;
+      if (preferredB < 0) return -1;
+      return preferredA - preferredB;
+    }
+    return a.label.localeCompare(b.label, "zh-Hans-CN");
+  });
 
 const chartTypes = {
   top_free: { label: "免费游戏榜", appBrainPath: "top_free", appleName: "FreeApplications" },
@@ -61,8 +94,18 @@ function cellsFromRow(rowHtml) {
 }
 
 function normalizeCountry(value) {
-  const code = String(value || "us").toLowerCase();
+  const code = String(value || GLOBAL_COUNTRY).toLowerCase();
+  if (["all", "world", GLOBAL_COUNTRY].includes(code)) return GLOBAL_COUNTRY;
   return countries.some((country) => country.code === code) ? code : "us";
+}
+
+function countryLabel(code) {
+  if (code === GLOBAL_COUNTRY) return "全球";
+  return countries.find((item) => item.code === code)?.label || code.toUpperCase();
+}
+
+function countryDisplay(code) {
+  return code === GLOBAL_COUNTRY ? "GLOBAL" : code.toUpperCase();
 }
 
 function normalizeChart(value) {
@@ -87,6 +130,20 @@ function appBrainUrl(chart, country) {
 
 function appleChartUrl(chart, country, limit) {
   return `https://itunes.apple.com/WebObjects/MZStoreServices.woa/ws/charts?cc=${country}&g=6014&name=${chartTypes[chart].appleName}&limit=${limit}`;
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const results = [];
+  let index = 0;
+  async function worker() {
+    while (index < items.length) {
+      const currentIndex = index;
+      index += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
 }
 
 function appleLookupUrl(ids, country) {
@@ -155,7 +212,7 @@ async function fetchAppBrainRanking({ chart, country, limit }) {
   const html = await fetchText(url);
   return {
     key: `appbrain:${chart}:${country}`,
-    label: `AppBrain - ${countries.find((item) => item.code === country)?.label || country} ${chartTypes[chart].label}`,
+    label: `AppBrain - ${countryLabel(country)} ${chartTypes[chart].label}`,
     source: "AppBrain",
     platform: "Google Play",
     country: country.toUpperCase(),
@@ -212,7 +269,7 @@ async function fetchAppleRanking({ chart, country, limit }) {
 
   return {
     key: `apple:${chart}:${country}`,
-    label: `Apple 官方 App Store - ${countries.find((item) => item.code === country)?.label || country} ${chartTypes[chart].label}`,
+    label: `Apple 官方 App Store - ${countryLabel(country)} ${chartTypes[chart].label}`,
     source: "Apple App Store",
     platform: "iOS",
     country: country.toUpperCase(),
@@ -222,7 +279,8 @@ async function fetchAppleRanking({ chart, country, limit }) {
 }
 
 function normalizeGameKey(item) {
-  return String(item.name || "")
+  const stableId = item.platform === "Google Play" && item.packageName ? item.packageName : "";
+  return String(stableId || item.name || "")
     .toLowerCase()
     .replace(/[®™©]/g, "")
     .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, " ")
@@ -280,6 +338,103 @@ function mergeOverallRankings(rankings, limit) {
       sourceUrl: item.sourceUrl,
       downloads: item.downloads || "",
     }));
+}
+
+async function fetchGlobalAppBrainRanking({ chart, limit }) {
+  const perCountryLimit = Math.max(limit, Math.min(50, limit * 2));
+  const rankings = await mapWithConcurrency(countryCodes, GLOBAL_CONCURRENCY, (country) => {
+    const fallback = {
+      key: `appbrain:${chart}:${country}`,
+      label: `AppBrain - ${countryLabel(country)} ${chartTypes[chart].label}`,
+      source: "AppBrain",
+      platform: "Google Play",
+      country: countryDisplay(country),
+      url: appBrainUrl(chart, country),
+    };
+    return captureRanking(() => fetchAppBrainRanking({ chart, country, limit: perCountryLimit }), fallback);
+  });
+  const successful = rankings.filter((ranking) => (ranking.items || []).length);
+  const warnings = rankings.filter((ranking) => ranking.warning);
+  const items = mergeOverallRankings(successful, limit);
+  return {
+    key: `appbrain:${chart}:${GLOBAL_COUNTRY}`,
+    label: `AppBrain - 全球 ${chartTypes[chart].label}`,
+    source: "AppBrain",
+    platform: "Google Play",
+    country: "GLOBAL",
+    url: "",
+    items,
+    countryCount: countryCodes.length,
+    successfulCountryCount: successful.length,
+    warning: warnings.length ? `${warnings.length} 个国家/地区暂时不可用。` : "",
+  };
+}
+
+async function fetchGlobalRankings({ source, chart, filter, limit }) {
+  const rankings = [];
+  if (source === "appbrain" || source === "overall") {
+    rankings.push(await fetchGlobalAppBrainRanking({ chart, limit: limit * 2 }));
+  }
+  if (source === "apple") {
+    rankings.push({
+      key: `apple:${chart}:${GLOBAL_COUNTRY}`,
+      label: `Apple 官方 App Store - 全球 ${chartTypes[chart].label}`,
+      source: "Apple App Store",
+      platform: "iOS",
+      country: "GLOBAL",
+      url: "",
+      items: [],
+      warning: "Apple 官方公开榜单接口必须指定国家/地区，当前全球模式不做 Apple 聚合。",
+    });
+  }
+
+  const sourceItems = source === "appbrain"
+    ? rankings.flatMap((ranking) => ranking.items || [])
+    : mergeOverallRankings(rankings, limit * 2);
+  const items = filterItems(sourceItems, filter).slice(0, limit);
+  const data = {
+    providerId: `${source}:${chart}:${GLOBAL_COUNTRY}`,
+    source,
+    chart,
+    filter,
+    country: "GLOBAL",
+    label: `${sourceTypes[source].label} - 全球 ${chartTypes[chart].label}`,
+    sourceUrl: rankings.map((ranking) => ranking.url).filter(Boolean).join(" | "),
+    fetchedAt: new Date().toISOString(),
+    cached: false,
+    algorithm: { name: "跨国家 Reciprocal Rank Fusion", k: RRF_K, formula: "score += 1 / (k + rank)" },
+    fields: {
+      rank: true,
+      rankChange: true,
+      icon: true,
+      name: true,
+      rating: true,
+      downloads: true,
+      recentDownloads: chart !== "top_grossing",
+      releaseDate: source !== "appbrain",
+      offlineCandidate: true,
+    },
+    sources: rankings.map((ranking) => ({
+      key: ranking.key,
+      label: ranking.label,
+      source: ranking.source,
+      platform: ranking.platform,
+      country: ranking.country,
+      count: ranking.items?.length || 0,
+      countryCount: ranking.countryCount,
+      successfulCountryCount: ranking.successfulCountryCount,
+      warning: ranking.warning,
+      url: ranking.url,
+    })),
+    notes: [
+      "全球榜不使用单一国家页面，而是抓取多个国家/地区榜单后用 RRF 融合，出现国家越多、排名越靠前的游戏得分越高。",
+      "Google Play 来源使用 AppBrain 各国家/地区公开榜单融合；Apple 官方公开榜单没有全球端点，当前全球模式不聚合 Apple。",
+      "单机筛选是基于名称、开发者和类型关键词的候选判断，不等同于商店官方标签。",
+      ...rankings.filter((ranking) => ranking.warning).map((ranking) => `${ranking.source}: ${ranking.warning}`),
+    ],
+    items,
+  };
+  return data;
 }
 
 const offlineKeywords = [
@@ -357,14 +512,20 @@ async function fetchAppRankings(options = {}) {
   const cached = cache.get(cacheKey);
   if (!refresh && cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) return { ...cached.data, cached: true };
 
+  if (country === GLOBAL_COUNTRY) {
+    const data = await fetchGlobalRankings({ source, chart, filter, limit });
+    cache.set(cacheKey, { cachedAt: Date.now(), data });
+    return data;
+  }
+
   const rankings = [];
   if (source === "appbrain" || source === "overall") {
     const fallback = {
       key: `appbrain:${chart}:${country}`,
-      label: `AppBrain - ${countries.find((item) => item.code === country)?.label || country} ${chartTypes[chart].label}`,
+      label: `AppBrain - ${countryLabel(country)} ${chartTypes[chart].label}`,
       source: "AppBrain",
       platform: "Google Play",
-      country: country.toUpperCase(),
+      country: countryDisplay(country),
       url: appBrainUrl(chart, country),
     };
     const ranking = source === "overall"
@@ -375,10 +536,10 @@ async function fetchAppRankings(options = {}) {
   if ((source === "apple" || source === "overall") && chartTypes[chart].appleName) {
     const fallback = {
       key: `apple:${chart}:${country}`,
-      label: `Apple 官方 App Store - ${countries.find((item) => item.code === country)?.label || country} ${chartTypes[chart].label}`,
+      label: `Apple 官方 App Store - ${countryLabel(country)} ${chartTypes[chart].label}`,
       source: "Apple App Store",
       platform: "iOS",
-      country: country.toUpperCase(),
+      country: countryDisplay(country),
       url: appleChartUrl(chart, country, limit),
     };
     const ranking = source === "overall"
@@ -394,8 +555,8 @@ async function fetchAppRankings(options = {}) {
     source,
     chart,
     filter,
-    country: country.toUpperCase(),
-    label: `${sourceTypes[source].label} - ${countries.find((item) => item.code === country)?.label || country} ${chartTypes[chart].label}`,
+    country: countryDisplay(country),
+    label: `${sourceTypes[source].label} - ${countryLabel(country)} ${chartTypes[chart].label}`,
     sourceUrl: rankings.map((ranking) => ranking.url).filter(Boolean).join(" | "),
     fetchedAt: new Date().toISOString(),
     cached: false,
@@ -438,7 +599,7 @@ function getRankingProviders() {
   return {
     sources: Object.entries(sourceTypes).map(([id, source]) => ({ id, ...source })),
     charts: Object.entries(chartTypes).map(([id, chart]) => ({ id, label: chart.label, appleAvailable: Boolean(chart.appleName) })),
-    countries,
+    countries: [{ code: GLOBAL_COUNTRY, label: "全球" }, ...countries],
     filters: [
       { id: "all", label: "全部游戏" },
       { id: "offline", label: "可能单机/离线" },

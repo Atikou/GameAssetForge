@@ -80,6 +80,24 @@ function registerExtendedTools(server) {
   );
 
   server.registerTool(
+    "pixel_image_to_json",
+    {
+      title: "像素图转 JSON",
+      description: "把像素图片导出为精简调色板索引 JSON，格式为 {w,h,c,p}，其中 c 是颜色表，p 是 [x,y,colorIndex]。",
+      inputSchema: {
+        imagePath: z.string(),
+        outputPath: z.string().optional(),
+        outputDir: z.string().optional(),
+        includeTransparent: z.boolean().default(false),
+      },
+    },
+    async (args) =>
+      callSingleImageTool("/api/image/pixel-json", args, "pixel-image.json", {
+        includeTransparent: args.includeTransparent,
+      }),
+  );
+
+  server.registerTool(
     "pack_atlas_enhanced",
     {
       title: "增强图集打包",

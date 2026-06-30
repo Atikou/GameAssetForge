@@ -11,6 +11,7 @@ const {
   trimTransparent,
   pixelScaleImage,
   truePixelImage,
+  pixelJsonImage,
   interpolateImages,
 } = require("../tools/image");
 
@@ -110,6 +111,17 @@ function registerImageRoutes(app, upload) {
       const { output, metadata } = await truePixelImage(requireFile(req).buffer, req.body);
       res.setHeader("X-GameAssetForge-Metadata", Buffer.from(JSON.stringify(metadata)).toString("base64"));
       pngResponse(res, output, "true-pixel-image.png");
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/image/pixel-json", upload.single("image"), async (req, res, next) => {
+    try {
+      const data = await pixelJsonImage(requireFile(req).buffer, req.body);
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="pixel-image.json"');
+      res.json(data);
     } catch (error) {
       next(error);
     }

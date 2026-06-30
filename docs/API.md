@@ -163,6 +163,31 @@ Content-Type: multipart/form-data
 
 响应：PNG 图片。
 
+## 像素图转 JSON
+
+```http
+POST /api/image/pixel-json
+Content-Type: multipart/form-data
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `image` | File | 是 | 无 | 输入像素图片 |
+| `includeTransparent` | boolean | 否 | `false` | 是否保留完全透明像素 |
+
+响应：JSON。字段使用精简命名：
+
+```json
+{
+  "w": 16,
+  "h": 16,
+  "c": ["#00000000", "#ffcc00ff"],
+  "p": [[0, 0, 0], [1, 0, 1]]
+}
+```
+
+其中 `w/h` 是图片尺寸，`c` 是 RGBA 颜色表，`p` 是 `[x, y, 颜色索引]`。
+
 ## 批量处理队列
 
 ```http
@@ -430,6 +455,7 @@ curl -X POST http://127.0.0.1:5180/api/unity/apk-extract \
 | --- | --- | --- | --- |
 | 图片格式转换 / 压缩 | `POST /api/image/convert` | `image`，`format=png/webp/jpeg/avif`，`quality`，`maxSide`，`background` | 图片文件 |
 | AI 伪像素转真像素 | `POST /api/image/true-pixel` | `image`，`cellSize`，`outputScale`，`colors`，`sharpen`，`sampleKernel`，`dither` | PNG |
+| 像素图转 JSON | `POST /api/image/pixel-json` | `image`，`includeTransparent` | JSON，格式 `{w,h,c,p}` |
 | 透明边缘修复 | `POST /api/image/edge-fix` | `image`，`iterations`，`alphaThreshold` | PNG |
 | Sprite 描边 / 投影 / 调色 / 压色 | `POST /api/image/stylize` | `image`，`operation=outline/shadow/palette/color` 及对应参数 | PNG |
 | 法线图 | `POST /api/image/normal-map` | `image`，`strength` | PNG |

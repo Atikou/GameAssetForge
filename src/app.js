@@ -1559,6 +1559,7 @@ async function applyTruePixel() {
   state.truePixelBlob = null;
   state.truePixelMetadata = null;
   $("#downloadTruePixel").disabled = true;
+  $("#downloadPixelJson").disabled = true;
   fitCanvasToImage($("#truePixelSourceCanvas"), state.truePixelImage);
   setText("truePixelStatus", "正在重采样像素网格...");
 
@@ -1587,6 +1588,7 @@ async function applyTruePixel() {
     state.truePixelMetadata = metadata;
     $("#truePixelResultLabel").textContent = `真像素结果 ${metadata.width || image.width}x${metadata.height || image.height}`;
     $("#downloadTruePixel").disabled = false;
+    $("#downloadPixelJson").disabled = false;
     setText(
       "truePixelStatus",
       [
@@ -2809,6 +2811,28 @@ function setupRankingWindow() {
     setMeta(`来源: ${data.label || "-"} | 抓取时间: ${formatDateTime(data.fetchedAt)} | 条数: ${items.length}${algorithmNote}${releaseNote ? ` | ${releaseNote}` : ""}`);
   };
 
+  const loadRankingProviders = async () => {
+    if (!countrySelect || countrySelect.dataset.loaded === "true") return;
+    try {
+      const data = await apiJson("/api/rankings/providers");
+      const selectedCountry = countrySelect.value || "global";
+      const countries = data.countries || [];
+      if (countries.length) {
+        countrySelect.replaceChildren();
+        countries.forEach((country) => {
+          const option = document.createElement("option");
+          option.value = country.code;
+          option.textContent = country.label;
+          if (country.code === selectedCountry) option.selected = true;
+          countrySelect.appendChild(option);
+        });
+      }
+      countrySelect.dataset.loaded = "true";
+    } catch {
+      countrySelect.dataset.loaded = "true";
+    }
+  };
+
   const refreshRankings = async (force = true) => {
     const token = state.rankingFetchToken + 1;
     state.rankingFetchToken = token;
@@ -2817,7 +2841,7 @@ function setupRankingWindow() {
     setMeta("正在连接榜单来源...");
     try {
       const source = sourceSelect?.value || "appbrain";
-      const country = countrySelect?.value || "us";
+      const country = countrySelect?.value || "global";
       const chart = chartSelect?.value || "top_new_free";
       const filter = filterSelect?.value || "all";
       const limit = limitSelect?.value || "50";
@@ -2845,7 +2869,7 @@ function setupRankingWindow() {
     openRankingWindow();
     if (!tableBody.dataset.loaded) {
       tableBody.dataset.loaded = "true";
-      refreshRankings(false);
+      loadRankingProviders().finally(() => refreshRankings(false));
     }
   });
   closeButton?.addEventListener("click", closeRankingWindow);
@@ -3136,6 +3160,18 @@ function setupTruePixelTool() {
   });
   $("#downloadTruePixel").addEventListener("click", () => {
     if (state.truePixelBlob) downloadBlob(state.truePixelBlob, "true-pixel.png");
+  });
+  $("#downloadPixelJson").addEventListener("click", async () => {
+    if (!state.truePixelFile) return;
+    const form = new FormData();
+    form.append("image", state.truePixelFile, state.truePixelFile.name);
+    const response = await fetch("/api/image/pixel-json", { method: "POST", body: form });
+    const blob = await response.blob();
+    if (!response.ok) {
+      setText("truePixelStatus", await blob.text());
+      return;
+    }
+    downloadBlob(blob, replaceExtension(state.truePixelFile.name, "-pixels", "json"));
   });
 }
 

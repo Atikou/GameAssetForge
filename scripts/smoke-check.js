@@ -123,6 +123,7 @@ for (const id of [
   "truePixelInput",
   "truePixelResultCanvas",
   "downloadTruePixel",
+  "downloadPixelJson",
   "pixelEditorFrame",
   "pixelEditorCanvas",
   "editorGridOverlay",
@@ -178,6 +179,7 @@ for (const route of [
   "/api/image/trim-transparent",
   "/api/image/pixel-scale",
   "/api/image/true-pixel",
+  "/api/image/pixel-json",
   "/api/image/interpolate",
   "/api/batch/process",
   "/api/sequence/rename",
@@ -213,6 +215,7 @@ for (const tool of [
   "extract_video_frames",
   "chroma_key_video",
   "true_pixel_image",
+  "pixel_image_to_json",
   "extract_unity_apk",
 ]) {
   if (!mcpTree.includes(`"${tool}"`)) {
@@ -237,6 +240,7 @@ for (const imageExport of [
   "trimTransparent",
   "pixelScaleImage",
   "truePixelImage",
+  "pixelJsonImage",
   "edgeFixImage",
   "stylizeImage",
   "normalMapImage",

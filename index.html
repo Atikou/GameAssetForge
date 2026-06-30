@@ -49,7 +49,8 @@
         <label class="field">
           <span>国家</span>
           <select id="rankingCountry">
-            <option value="us" selected>美国</option>
+            <option value="global" selected>全球</option>
+            <option value="us">美国</option>
             <option value="jp">日本</option>
             <option value="kr">韩国</option>
             <option value="gb">英国</option>
@@ -1015,6 +1016,7 @@
               </section>
               <section class="step-card action-card">
                 <button id="downloadTruePixel" class="primary-button wide" type="button" disabled>导出真像素 PNG</button>
+                <button id="downloadPixelJson" class="ghost-button wide" type="button" disabled>导出像素 JSON</button>
                 <pre class="metadata-box" id="truePixelStatus">等待选择图片...</pre>
               </section>
             </div>

@@ -81,6 +81,7 @@ http://127.0.0.1:5181/health
 | `trim_transparent_edges` | 自动裁透明边，返回 offset 元数据 |
 | `pixel_scale_image` | 像素风最近邻放大 / 缩小 |
 | `true_pixel_image` | AI 伪像素图转真实硬边像素 PNG |
+| `pixel_image_to_json` | 像素图导出为 `{w,h,c,p}` 调色板索引 JSON |
 | `interpolate_images` | 两帧图片生成中间帧 |
 | `build_atlas` | 多图合成图集 ZIP |
 | `batch_process_images` | 批量裁透明边、像素缩放、扣背景或真像素化 |

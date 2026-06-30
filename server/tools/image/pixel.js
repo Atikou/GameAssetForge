@@ -91,7 +91,43 @@ async function truePixelImage(buffer, body = {}) {
   };
 }
 
+async function pixelJsonImage(buffer, body = {}) {
+  const includeTransparent = String(body.includeTransparent || "false").toLowerCase() === "true" || body.includeTransparent === true;
+  const { data, info } = await sharp(buffer, { animated: false }).rotate().ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const colors = [];
+  const colorIndex = new Map();
+  const pixels = [];
+
+  function indexForColor(color) {
+    let index = colorIndex.get(color);
+    if (index === undefined) {
+      index = colors.length;
+      colorIndex.set(color, index);
+      colors.push(color);
+    }
+    return index;
+  }
+
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const offset = (y * info.width + x) * 4;
+      const alpha = data[offset + 3];
+      if (!includeTransparent && alpha === 0) continue;
+      const color = `#${data[offset].toString(16).padStart(2, "0")}${data[offset + 1].toString(16).padStart(2, "0")}${data[offset + 2].toString(16).padStart(2, "0")}${alpha.toString(16).padStart(2, "0")}`;
+      pixels.push([x, y, indexForColor(color)]);
+    }
+  }
+
+  return {
+    w: info.width,
+    h: info.height,
+    c: colors,
+    p: pixels,
+  };
+}
+
 module.exports = {
   pixelScaleImage,
   truePixelImage,
+  pixelJsonImage,
 };
