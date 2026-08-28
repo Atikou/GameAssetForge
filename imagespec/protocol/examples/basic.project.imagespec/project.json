@@ -1,0 +1,88 @@
+{
+  "$schema": "https://gameassetforge.local/imagespec/project.schema.json",
+  "schemaVersion": "2.0",
+  "projectId": "example.basic",
+  "name": "Basic game UI",
+  "metadata": {
+    "createdAt": "2026-08-25T00:00:00.000Z",
+    "updatedAt": "2026-08-25T00:00:00.000Z",
+    "description": "A minimal ImageSpec project with a composite HUD and dynamic text.",
+    "author": "GameAssetForge",
+    "tags": ["example", "ui"]
+  },
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "colorSpace": "srgb",
+    "alphaMode": "straight",
+    "background": null,
+    "orientation": "portrait"
+  },
+  "designSystem": {
+    "styleDescription": "Readable fantasy mobile game UI",
+    "palette": ["#24152F", "#F8D36A", "#FFFFFF"],
+    "lighting": "Soft top-left key light",
+    "camera": "Orthographic UI",
+    "perspective": "None",
+    "compositionFocus": "Player status and primary action",
+    "safeAreas": [{ "x": 40, "y": 60, "width": 1000, "height": 1800 }],
+    "hitAreas": [],
+    "forbiddenContent": ["baked dynamic player name"],
+    "references": []
+  },
+  "assetGraph": {
+    "nodes": [
+      {
+        "id": "hud.player.frame",
+        "name": "Player frame",
+        "type": "composite",
+        "parentId": null,
+        "bounds": { "x": 48, "y": 72, "width": 420, "height": 120 },
+        "transform": { "x": 0, "y": 0, "scaleX": 1, "scaleY": 1, "rotation": 0, "anchor": { "x": 0.5, "y": 0.5 } },
+        "zIndex": 10,
+        "source": { "kind": "composite" },
+        "masks": {},
+        "generationRule": { "adapter": null, "prompt": "", "negativePrompt": "", "referenceIds": [], "mustBeSeparate": false, "parameters": {} },
+        "editPolicy": { "allowedOperations": ["asset.move", "asset.align"], "protectedProperties": [], "preserveOutside": true, "requiresApproval": false },
+        "exportPolicy": { "enabled": false, "fileName": "hud-player-frame.png", "format": "png", "pivot": { "x": 0.5, "y": 0.5 }, "padding": 0, "scales": [1], "trimTransparent": false, "nineSlice": null, "atlasGroup": null, "preserveTransparentPadding": false },
+        "state": "draft",
+        "tags": ["hud"]
+      },
+      {
+        "id": "hud.player.name",
+        "name": "Player name",
+        "type": "text",
+        "parentId": "hud.player.frame",
+        "bounds": { "x": 96, "y": 92, "width": 260, "height": 36 },
+        "transform": { "x": 0, "y": 0, "scaleX": 1, "scaleY": 1, "rotation": 0, "anchor": { "x": 0.5, "y": 0.5 } },
+        "zIndex": 11,
+        "source": { "kind": "text", "text": "{playerName}" },
+        "masks": {},
+        "generationRule": { "adapter": null, "prompt": "", "negativePrompt": "", "referenceIds": [], "mustBeSeparate": true, "parameters": {} },
+        "editPolicy": { "allowedOperations": ["asset.move", "asset.align", "asset.resize"], "protectedProperties": ["source.text"], "preserveOutside": true, "requiresApproval": false },
+        "exportPolicy": { "enabled": false, "fileName": "hud-player-name.png", "format": "png", "pivot": { "x": 0.5, "y": 0.5 }, "padding": 0, "scales": [1], "trimTransparent": false, "nineSlice": null, "atlasGroup": null, "preserveTransparentPadding": false },
+        "state": "draft",
+        "tags": ["hud", "dynamic"]
+      }
+    ]
+  },
+  "regions": [],
+  "operationHistory": [],
+  "exportPresets": [
+    {
+      "id": "generic.default",
+      "name": "Generic",
+      "engine": "generic",
+      "outputDir": "build/generic",
+      "format": "png",
+      "scales": [1],
+      "atlas": { "enabled": false, "maxSize": 2048, "padding": 2, "extrude": 1, "powerOfTwo": false },
+      "options": {}
+    }
+  ],
+  "validationRules": [
+    { "id": "schema.valid", "type": "schema.valid", "enabled": true, "severity": "error", "parameters": {} },
+    { "id": "graph.acyclic", "type": "graph.acyclic", "enabled": true, "severity": "error", "parameters": {} }
+  ],
+  "revision": { "number": 0, "hash": null }
+}

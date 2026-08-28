@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gameassetforge.local/imagespec/receipt.schema.json",
+  "title": "ImageSpec Receipt 2.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "receiptId",
+    "planId",
+    "projectId",
+    "status",
+    "startedAt",
+    "finishedAt",
+    "oldRevision",
+    "newRevision",
+    "changedAssets",
+    "generatedFiles",
+    "validationResult",
+    "warnings",
+    "provenance"
+  ],
+  "properties": {
+    "$schema": { "const": "https://gameassetforge.local/imagespec/receipt.schema.json" },
+    "schemaVersion": { "const": "2.0" },
+    "receiptId": { "$ref": "common.schema.json#/$defs/stableId" },
+    "planId": { "$ref": "common.schema.json#/$defs/stableId" },
+    "projectId": { "$ref": "common.schema.json#/$defs/stableId" },
+    "status": { "enum": ["succeeded", "failed", "blocked", "stale", "rejected"] },
+    "startedAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "finishedAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "oldRevision": { "$ref": "common.schema.json#/$defs/revision" },
+    "newRevision": { "$ref": "common.schema.json#/$defs/revision" },
+    "changedAssets": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/stableId" }, "uniqueItems": true },
+    "generatedFiles": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/fileRecord" } },
+    "validationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "issues"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "issues": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/issue" } },
+        "reportPath": { "$ref": "common.schema.json#/$defs/relativePath" }
+      }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "error": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "details": {}
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["application", "applicationVersion", "nodeVersion", "platform", "adapters"],
+      "properties": {
+        "application": { "const": "GameAssetForge" },
+        "applicationVersion": { "type": "string" },
+        "nodeVersion": { "type": "string" },
+        "platform": { "type": "string" },
+        "sharpVersion": { "type": ["string", "null"] },
+        "adapters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "version"],
+            "properties": {
+              "id": { "type": "string" },
+              "version": { "type": "string" },
+              "details": { "type": "object" }
+            }
+          }
+        },
+        "requestId": { "type": "string" }
+      }
+    }
+  }
+}

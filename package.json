@@ -11,6 +11,8 @@
     "postinstall": "node scripts/install-unity-tools.js",
     "install-tools": "node scripts/install-unity-tools.js",
     "unity-tools": "node scripts/check-unity-tools.js",
+    "imagespec": "node imagespec/cli/bin.js",
+    "test": "node --test",
     "check": "node scripts/smoke-check.js"
   },
   "keywords": [
@@ -23,6 +25,8 @@
   "license": "UNLICENSED",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "express": "^4.19.2",
     "ffmpeg-static": "^5.2.0",
     "jszip": "^3.10.1",

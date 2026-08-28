@@ -92,6 +92,16 @@ http://127.0.0.1:5181/health
 | `extract_video_frames` | 视频抽帧 |
 | `chroma_key_video` | 视频逐帧抠背景 |
 | `extract_unity_apk` | Unity APK 工程还原、资源提取或 IL2CPP 结构分析 |
+| `imagespec_project_create` | 创建 `*.project.imagespec` 权威工程 |
+| `imagespec_project_inspect` | 检查工程修订、锁、事务和数量 |
+| `imagespec_asset_find` | 按稳定 ID、名称或标签定位 AssetNode |
+| `imagespec_capabilities` | 列出内置与宿主外部 Runner 能力 |
+| `imagespec_plan_create` | 创建、校验、预览并保存 OperationPlan |
+| `imagespec_plan_preview` | 在当前修订上预览不可变 Plan |
+| `imagespec_plan_apply` | 原子应用 Plan 并返回 Receipt |
+| `imagespec_validate` | 验证工程并可推进资产状态 |
+| `imagespec_build` | 按 ExportPreset 构建派生产物 |
+| `imagespec_export` | 导出含引擎适配文件的 ZIP |
 
 ## 调用示例
 
@@ -135,11 +145,22 @@ MCP 层只负责：
 
 - 暴露 Agent 友好的工具名和参数 schema。
 - 接收本地文件路径。
-- 调用 HTTP API。
+- 传统工具调用 HTTP API；ImageSpec 工具直接调用共享 ImageSpec Core。
 - 保存输出文件。
 - 返回结构化结果。
 
-这样后续新增算法时，只需要先补 API，再在 MCP 层加一个轻量 wrapper。
+这样后续新增算法时，只需要先补共享领域实现，再在 HTTP/MCP 层加轻量 wrapper。
+
+### ImageSpec Agent 顺序
+
+1. `imagespec_project_inspect` 和 `imagespec_asset_find` 获取当前 revision 与稳定目标。
+2. `imagespec_plan_create` 声明 operations、允许/拒绝变更、约束、歧义和预期输出。
+3. `imagespec_plan_preview` 检查实际影响。
+4. 仅在用户已确认具体的需审批 Plan 时，给 `imagespec_plan_apply` 传 `approved=true` 与 `approvalId`。
+5. 读取返回 Receipt 的 status、newRevision、validationResult、generatedFiles 和 provenance。
+6. 先 `imagespec_validate`，再按请求调用 `imagespec_build` 或 `imagespec_export`。
+
+Plan 同时绑定 revision number 与 hash；过期后必须重新 inspect/建 Plan，不应改写旧 Plan。工程路径、二进制和审计文件由 Core 管理，MCP 调用方不要手工修改。
 ## 新增 MCP 工具
 
 新增功能也提供 MCP 入口，适合让 Agent 直接处理本地文件路径：

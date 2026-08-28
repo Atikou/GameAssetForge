@@ -1,0 +1,4 @@
+interface:
+  display_name: "ImageSpec Agent"
+  short_description: "Plan, validate, build, and export ImageSpec projects"
+  default_prompt: "Use $imagespec-agent to inspect this ImageSpec project, create a revision-safe plan, preview it, and apply it after validation."

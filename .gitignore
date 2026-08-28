@@ -1,5 +1,7 @@
 node_modules/
 outputs/
+imagespec-projects/
+.codex_tmp_rank_images/
 dist/
 build/
 tools/external/*

@@ -18,6 +18,7 @@ GameAssetForge 是一个本地运行的游戏素材处理工具台，提供中�
 - 未知图集切割：支持透明背景、纯色背景、规则网格自动识别，也可按行列、格子尺寸、边距和间隔手动切割。
 - 帧图导出：支持多张图片合成图集 PNG，并生成对应 JSON 元数据。
 - Unity APK 资源检查：导入打包后的 APK，导出 Unity 原始结构清单，配置 AssetRipper / AssetStudio / Cpp2IL 后可还原工程、提取资源或分析 IL2CPP。
+- ImageSpec 图片规范：直接导入图片，完成区域框选、图层组织、AI 修改说明、版本对比、切图设置和 ZIP 需求包导出；网页模块不依赖外部工程。
 
 ## 运行完整工具
 
@@ -66,18 +67,35 @@ npm run api
 npm run mcp
 ```
 
-单独运行 MCP 时，需要 API 已经可用。可通过 `GAF_API_URL` 指定 API 地址。
+单独运行 MCP 时，传统图片工具需要 API 已经可用，可通过 `GAF_API_URL` 指定 API 地址；`imagespec_*` 工具直接调用共享 ImageSpec Core。
+
+## ImageSpec
+
+网页工具列表中的 **ImageSpec 图片规范** 是当前项目内的自包含模块。直接导入 PNG、JPG、WebP 后即可使用；当前工作自动保存在浏览器 IndexedDB，也可以保存 `.imagespec.json` 或导出包含原图、编号图、蒙版、切图、Manifest 和 AI 说明的 ZIP 需求包。网页模块不会读取外部工程目录，也不要求启动 `D:\Learn\ImageGenerate`。
+
+仓库同时保留可选的 ImageSpec 2.0 CLI/Core，供 Agent 或自动化流水线管理目录型权威工程。它与网页图片规范模块是两个入口，网页工具不依赖 CLI 工程：
+
+ImageSpec 工程是一个以 `.project.imagespec` 结尾的目录。先创建并检查一个工程：
+
+```powershell
+npm run imagespec -- project create --project .\imagespec-projects\demo.project.imagespec --name Demo --width 1080 --height 1920
+npm run imagespec -- project inspect --project .\imagespec-projects\demo.project.imagespec
+```
+
+CLI/HTTP 默认只允许访问仓库的 `imagespec-projects/`；可用 `GAF_IMAGESPEC_ROOTS` 配置额外可信根目录。外部 Runner 配置通过宿主环境变量 `GAF_IMAGESPEC_RUNNERS` 指向 JSON 文件，工程内容本身不能提供命令或端点。
 
 ## 文档
 
 - API 文档：[docs/API.md](docs/API.md)
 - MCP 文档：[docs/MCP.md](docs/MCP.md)
 - 项目结构：[docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)
+- ImageSpec 设计与使用：[docs/IMAGESPEC.md](docs/IMAGESPEC.md)
 
 ## 检查项目
 
 ```powershell
 npm run check
+npm test
 ```
 
 ## 说明

@@ -438,6 +438,30 @@ curl -X POST http://127.0.0.1:5180/api/unity/apk-extract \
   --output unity-apk-extract.zip
 ```
 
+## ImageSpec API
+
+ImageSpec 接口使用 JSON body，并共享 `ImageSpecService`。所有工程接口都要求 `projectPath`；路径必须位于 HTTP 允许根目录内。默认根目录为仓库的 `imagespec-projects/`，也可用 Windows 分号分隔的 `GAF_IMAGESPEC_ROOTS` 配置多个可信根目录。
+
+| 方法 | 接口 | 主要输入 | 输出 |
+| --- | --- | --- | --- |
+| GET | `/api/imagespec/capabilities` | 无 | 内置及宿主配置的 Runner 能力 |
+| GET | `/api/imagespec/schema/:name` | `project/plan/receipt/common` | 权威 JSON Schema |
+| POST | `/api/imagespec/project/create` | `projectPath`、`name`、可选 `width/height/projectId` | 新工程摘要 |
+| POST | `/api/imagespec/project/inspect` | `projectPath` | 修订、数量、锁和待恢复事务 |
+| POST | `/api/imagespec/project/read` | `projectPath` | 当前 ProjectSpec |
+| POST | `/api/imagespec/asset/find` | `projectPath`、`query` | AssetNode 匹配 |
+| POST | `/api/imagespec/plan/create` | `projectPath`、`plan` | 保存后的标准 Plan 与 preview |
+| POST | `/api/imagespec/plan/list` | `projectPath` | 不可变 Plan 列表 |
+| POST | `/api/imagespec/plan/preview` | `projectPath`、`planId` 或 `plan` | 影响预览 |
+| POST | `/api/imagespec/plan/apply` | `projectPath`、`planId/plan`、可选 `approved/approval` | 新 ProjectSpec 与 Receipt |
+| POST | `/api/imagespec/receipt/list` | `projectPath` | append-only Receipt 列表 |
+| POST | `/api/imagespec/file/read` | `projectPath`、`relativePath`（兼容 `path`） | 工程内二进制文件 |
+| POST | `/api/imagespec/validate` | `projectPath`、`apply` | 只读报告或带 Receipt 的状态推进 |
+| POST | `/api/imagespec/build` | `projectPath`、`presetId` | 构建 Receipt |
+| POST | `/api/imagespec/export` | `projectPath`、`presetId`、`outputPath` | ZIP 导出 Receipt |
+
+`plan/apply` 会拒绝 revision number/hash 过期的 Plan。需要审批时必须显式传入 `approved: true` 和可追踪的 `approval.id`。`outputPath` 必须是 `build/` 下的工程相对路径。
+
 ## 给 AI 调用的建议流程
 
 1. 先调用 `GET /api/health` 确认服务可用。

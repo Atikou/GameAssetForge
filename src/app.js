@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -37,7 +37,8 @@ const state = {
   rankingFetchToken: 0,
 };
 
-const statusText = $("#statusText");
+const statusPrimary = $("#appStatusPrimary");
+const statusSecondary = $("#appStatusSecondary");
 const toolMeta = {
   chromaPanel: {
     name: "抠背景",
@@ -152,6 +153,16 @@ const toolMeta = {
 };
 
 Object.assign(toolMeta, {
+  imagespecPanel: {
+    name: "ImageSpec 图片规范",
+    desc: "在当前工具中完成图片框选、图层组织、AI 修改说明、切图设置和需求包导出。",
+    use: "图片标注与切图",
+    useDesc: "适合把一张游戏 UI、角色图或概念图整理成无歧义、可继续编辑的图片需求。",
+    input: "PNG / JPG / WebP",
+    inputDesc: "直接导入图片或本地 ImageSpec 规范文件，不依赖外部工程目录。",
+    output: "ImageSpec ZIP 需求包",
+    outputDesc: "包含原图、编号图、区域图、蒙版、切图、JSON 清单和 AI 修改说明。",
+  },
   convertPanel: {
     name: "格式转换",
     desc: "图片格式转换、压缩和最长边限制。",
@@ -216,6 +227,11 @@ Object.assign(toolMeta, {
 
 const toolGroups = [
   {
+    name: "图片规范",
+    desc: "图片标注、图层说明、AI 修改要求、切图和需求包导出。",
+    panels: ["imagespecPanel"],
+  },
+  {
     name: "图片清理",
     desc: "透明背景、裁边和基础图片修整。",
     panels: ["chromaPanel", "trimPanel"],
@@ -258,9 +274,11 @@ const toolGroups = [
 ];
 
 function setStatus(message) {
-  if (statusText) {
-    statusText.textContent = message;
-  }
+  if (statusPrimary) statusPrimary.textContent = message;
+}
+
+function notifyToolStateChanged() {
+  document.dispatchEvent(new Event("gameassetforge:tool-state-changed"));
 }
 
 function loadImageFromFile(file) {
@@ -2391,89 +2409,181 @@ function sliceToCanvas(slice) {
 }
 
 function setupTabs() {
-  const buttons = [...document.querySelectorAll(".tab-button")];
-  const track = $(".wheel-track");
-  const windowElement = $(".wheel-window");
   const toolDrawer = $("#toolDrawer");
   const toolDrawerList = $("#toolDrawerList");
-  const normalizeIndex = (index) => ((index % buttons.length) + buttons.length) % buttons.length;
-  let activeIndex = Math.max(0, buttons.findIndex((button) => button.classList.contains("active")));
-  let visualIndex = activeIndex;
-  let currentPanelId = buttons[activeIndex]?.dataset.panel || "chromaPanel";
-  let showingOverview = true;
-  let wheelDelta = 0;
-  let dragLastY = 0;
-  let dragOffset = 0;
-  let slotStep = 88;
-  let isDragging = false;
-  let suppressClick = false;
-  let settleTimer = 0;
-
-  const getSignedDistance = (index) => {
-    const total = buttons.length;
-    let distance = index - visualIndex;
-    const half = total / 2;
-    if (distance > half) distance -= total;
-    if (distance < -half) distance += total;
-    return distance;
+  const toolGroupNav = $("#toolGroupNav");
+  const toolSearch = $("#toolSearch");
+  const recentToolList = $("#recentToolList");
+  const workspace = $(".workspace");
+  const helpButton = $("#helpButton");
+  const primaryActionButton = $("#globalExportButton");
+  const panelIds = toolGroups.flatMap((group) => group.panels).filter((panelId) => toolMeta[panelId] && $(`#${panelId}`));
+  const recentStorageKey = "gameAssetForgeRecentTools";
+  const primaryActionByPanel = {
+    chromaPanel: "downloadChroma",
+    resizePanel: "downloadResize",
+    interpolatePanel: "generateInterpolate",
+    videoPanel: "downloadAtlas",
+    batchPanel: "processBatch",
+    trimPanel: "downloadTrim",
+    pixelScalePanel: "downloadPixelScale",
+    truePixelPanel: "downloadTruePixel",
+    pixelEditorPanel: "downloadPixelEditor",
+    sequencePanel: "downloadSequenceAll",
+    atlasSlicePanel: "applyAtlasSlice",
+    convertPanel: "runConvert",
+    atlasPackPanel: "runAtlasPack",
+    unityApkPanel: "runUnityApkExtract",
+    spriteFxPanel: "runSpriteFx",
+    pipelinePanel: "runQualityReport",
+    imagespecPanel: "imagespecExportPackage",
+    audioPanel: "runAudio",
   };
+  let recentPanelIds = [];
+  let activeIndex = Math.max(0, panelIds.indexOf("chromaPanel"));
+  let currentPanelId = panelIds[activeIndex] || panelIds[0];
 
-  const layoutWheel = () => {
-    slotStep = Math.max(80, Math.min(104, windowElement.clientHeight * 0.18));
-    buttons.forEach((button, index) => {
-      const distance = getSignedDistance(index);
-      const position = distance * slotStep + dragOffset;
-      const absoluteDistance = Math.abs(position / slotStep);
-      const hidden = absoluteDistance > 2.35;
-      const scale = Math.max(0.62, 1 - absoluteDistance * 0.13);
-      const opacity = hidden ? 0 : Math.max(0.32, 1 - absoluteDistance * 0.25);
-      button.style.setProperty("--slot-y", `${position}px`);
-      button.style.setProperty("--slot-scale", scale.toFixed(3));
-      button.style.setProperty("--slot-opacity", opacity.toFixed(3));
-      button.style.setProperty("--slot-z", `${Math.round(200 - absoluteDistance * 10)}`);
-      button.classList.toggle("preview", index === visualIndex && index !== activeIndex);
-      button.tabIndex = index === activeIndex ? 0 : -1;
-      button.setAttribute("aria-hidden", hidden ? "true" : "false");
+  try {
+    const parsed = JSON.parse(localStorage.getItem(recentStorageKey) || "[]");
+    if (Array.isArray(parsed)) {
+      recentPanelIds = parsed.filter((panelId) => panelIds.includes(panelId)).slice(0, 5);
+    }
+  } catch {
+    recentPanelIds = [];
+  }
+
+  const activePanel = () => $(`#${currentPanelId}`);
+
+  const matchingPanels = (group) => {
+    const query = (toolSearch?.value || "").trim().toLowerCase();
+    return group.panels.filter((panelId) => {
+      const meta = toolMeta[panelId];
+      if (!meta || !panelIds.includes(panelId)) return false;
+      if (!query) return true;
+      const haystack = [group.name, group.desc, meta.name, meta.desc, meta.use, meta.input, meta.output].join(" ").toLowerCase();
+      return haystack.includes(query);
     });
   };
 
-  const pulseSelected = (button) => {
-    button.classList.remove("just-selected");
-    requestAnimationFrame(() => button.classList.add("just-selected"));
+  const updateCommandBar = () => {
+    const meta = toolMeta[currentPanelId];
+    if (meta) {
+      if ($("#currentToolName")) $("#currentToolName").textContent = meta.name;
+      if ($("#currentToolDesc")) $("#currentToolDesc").textContent = meta.desc;
+      if ($("#commandToolName")) $("#commandToolName").textContent = meta.name;
+      if ($("#commandToolTag")) $("#commandToolTag").textContent = meta.use;
+      if ($("#commandFileState")) $("#commandFileState").textContent = `输入：${meta.input}`;
+      if (statusSecondary) statusSecondary.textContent = `${meta.name} · 输出：${meta.output}`;
+    }
+    updatePrimaryAction();
   };
 
-  const renderOverview = (panelId) => {
-    const meta = toolMeta[panelId];
-    if (!meta) return;
-    $("#overviewTitle").textContent = meta.name;
-    $("#overviewDesc").textContent = meta.desc;
-    $("#overviewUse").textContent = meta.use;
-    $("#overviewUseDesc").textContent = meta.useDesc;
-    $("#overviewInput").textContent = meta.input;
-    $("#overviewInputDesc").textContent = meta.inputDesc;
-    $("#overviewOutput").textContent = meta.output;
-    $("#overviewOutputDesc").textContent = meta.outputDesc;
-    $("#enterToolButton").textContent = `进入${meta.name}`;
+  const updatePrimaryAction = () => {
+    if (!primaryActionButton) return;
+    const mappedId = primaryActionByPanel[currentPanelId];
+    const primary = mappedId ? $(`#${mappedId}`) : activePanel()?.querySelector(".primary-button:not(#globalExportButton)");
+    primaryActionButton.disabled = !primary || primary.disabled;
+    primaryActionButton.textContent = primary?.textContent?.trim() || "执行主操作";
+  };
+
+  const recordRecentTool = (panelId) => {
+    recentPanelIds = [panelId, ...recentPanelIds.filter((item) => item !== panelId)].slice(0, 5);
+    localStorage.setItem(recentStorageKey, JSON.stringify(recentPanelIds));
+  };
+
+  const activateTool = (index) => {
+    activeIndex = Math.max(0, Math.min(panelIds.length - 1, index));
+    currentPanelId = panelIds[activeIndex];
+    document.querySelectorAll(".tool-panel").forEach((panel) => panel.classList.remove("active"));
+    activePanel()?.classList.add("active");
+    workspace?.classList.remove("show-help");
+    recordRecentTool(currentPanelId);
+    updateCommandBar();
+    renderToolGroupNav();
+    renderToolDrawerList();
+    renderRecentTools();
+  };
+
+  const renderToolGroupNav = () => {
+    if (!toolGroupNav) return;
+    toolGroupNav.innerHTML = "";
+    toolGroups.forEach((group) => {
+      const visiblePanels = matchingPanels(group);
+      if (visiblePanels.length === 0) return;
+      const item = document.createElement("section");
+      item.className = "tool-nav-group";
+      item.classList.toggle("active", group.panels.includes(currentPanelId));
+      const title = document.createElement("h2");
+      title.textContent = group.name;
+      item.append(title);
+      const actions = document.createElement("div");
+      actions.className = "tool-nav-actions";
+      visiblePanels.forEach((panelId) => {
+        const index = panelIds.indexOf(panelId);
+        const meta = toolMeta[panelId];
+        if (index < 0 || !meta) return;
+        const action = document.createElement("button");
+        action.type = "button";
+        action.className = "tool-nav-action";
+        action.classList.toggle("active", index === activeIndex);
+        const actionName = document.createElement("strong");
+        actionName.textContent = meta.name;
+        const actionUse = document.createElement("span");
+        actionUse.textContent = meta.use;
+        action.append(actionName, actionUse);
+        action.addEventListener("click", () => activateTool(index));
+        actions.append(action);
+      });
+      item.append(actions);
+      toolGroupNav.append(item);
+    });
+    if (!toolGroupNav.children.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty-list-note";
+      empty.textContent = "没有匹配的工具";
+      toolGroupNav.append(empty);
+    }
+  };
+
+  const renderRecentTools = () => {
+    if (!recentToolList) return;
+    recentToolList.innerHTML = "";
+    recentPanelIds.forEach((panelId) => {
+      const index = panelIds.indexOf(panelId);
+      const meta = toolMeta[panelId];
+      if (index < 0 || !meta) return;
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = "recent-tool-action";
+      action.classList.toggle("active", panelId === currentPanelId);
+      action.textContent = meta.name;
+      action.addEventListener("click", () => activateTool(index));
+      recentToolList.append(action);
+    });
   };
 
   const renderToolDrawerList = () => {
+    if (!toolDrawerList) return;
     toolDrawerList.innerHTML = "";
     toolGroups.forEach((group) => {
       const item = document.createElement("section");
       const activeInGroup = group.panels.includes(currentPanelId);
       item.className = "tool-drawer-item";
       item.classList.toggle("active", activeInGroup);
-      item.innerHTML = `
-        <span class="tool-drawer-item-copy">
-          <strong>${group.name}</strong>
-          <span>${group.desc}</span>
-        </span>
-        <small>${activeInGroup ? "当前组" : "工具组"}</small>
-      `;
+      const copy = document.createElement("span");
+      copy.className = "tool-drawer-item-copy";
+      const title = document.createElement("strong");
+      title.textContent = group.name;
+      const desc = document.createElement("span");
+      desc.textContent = group.desc;
+      copy.append(title, desc);
+      const badge = document.createElement("small");
+      badge.textContent = activeInGroup ? "当前组" : "工具组";
+      item.append(copy, badge);
       const actions = document.createElement("div");
       actions.className = "tool-drawer-actions";
       group.panels.forEach((panelId) => {
-        const index = buttons.findIndex((button) => button.dataset.panel === panelId);
+        const index = panelIds.indexOf(panelId);
         const meta = toolMeta[panelId];
         if (index < 0 || !meta) return;
         const action = document.createElement("button");
@@ -2483,7 +2593,7 @@ function setupTabs() {
         action.textContent = meta.name;
         action.addEventListener("click", () => {
           closeToolDrawer();
-          activateTool(index, true, true);
+          activateTool(index);
         });
         actions.append(action);
       });
@@ -2494,179 +2604,55 @@ function setupTabs() {
 
   function openToolDrawer() {
     renderToolDrawerList();
-    toolDrawer.classList.add("is-open");
-    toolDrawer.setAttribute("aria-hidden", "false");
-    $("#toolDrawerClose").focus();
+    toolDrawer?.classList.add("is-open");
+    toolDrawer?.setAttribute("aria-hidden", "false");
+    $("#toolDrawerClose")?.focus();
   }
 
   function closeToolDrawer() {
-    toolDrawer.classList.remove("is-open");
-    toolDrawer.setAttribute("aria-hidden", "true");
-    $("#toolDrawerOpen").focus();
+    toolDrawer?.classList.remove("is-open");
+    toolDrawer?.setAttribute("aria-hidden", "true");
+    $("#toolDrawerOpen")?.focus();
   }
 
-  const showOverview = () => {
-    showingOverview = true;
-    $("#toolOverview").classList.add("active");
-    document.querySelectorAll(".tool-panel").forEach((panel) => panel.classList.remove("active"));
-    renderOverview(currentPanelId);
-  };
-
-  const enterTool = () => {
-    showingOverview = false;
-    $("#toolOverview").classList.remove("active");
-    document.querySelectorAll(".tool-panel").forEach((panel) => panel.classList.remove("active"));
-    $(`#${currentPanelId}`).classList.add("active");
-  };
-
-  const activateTool = (index, animate = true, enter = false) => {
-    window.clearTimeout(settleTimer);
-    activeIndex = normalizeIndex(index);
-    visualIndex = activeIndex;
-    dragOffset = 0;
-    windowElement.classList.add("is-settling");
-    windowElement.classList.remove("is-rolling");
-    windowElement.classList.remove("is-dragging");
-    const button = buttons[activeIndex];
-    const panelId = button.dataset.panel;
-    const meta = toolMeta[panelId];
-    currentPanelId = panelId;
-
-    document.querySelectorAll(".tab-button").forEach((item) => {
-      item.classList.remove("active");
-      item.classList.remove("just-selected");
+  const setHelpVisible = (visible) => {
+    workspace?.classList.toggle("show-help", visible);
+    if (helpButton) helpButton.textContent = visible ? "关闭帮助" : "帮助";
+    document.querySelectorAll(".help-toggle").forEach((button) => {
+      button.textContent = visible ? "关闭帮助" : "帮助";
     });
-    button.classList.add("active");
-
-    if (meta) {
-      $("#currentToolName").textContent = meta.name;
-      $("#currentToolDesc").textContent = meta.desc;
-    }
-
-    track.style.transform = "translateY(0)";
-    layoutWheel();
-    // Commit the snapped position before playing the in-place scale animation.
-    void windowElement.offsetHeight;
-    windowElement.classList.remove("is-settling");
-    if (animate) {
-      pulseSelected(button);
-    }
-
-    renderToolDrawerList();
-
-    if (enter) {
-      enterTool();
-    } else {
-      showOverview();
-    }
   };
 
-  const stageTool = (index) => {
-    visualIndex = normalizeIndex(index);
-    dragOffset = 0;
-    windowElement.classList.add("is-rolling");
-    layoutWheel();
-  };
-
-  const settleTool = (delay = 180) => {
-    window.clearTimeout(settleTimer);
-    settleTimer = window.setTimeout(() => {
-      activateTool(visualIndex, true, !showingOverview);
-    }, delay);
-  };
-
-  buttons.forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-    });
+  toolSearch?.addEventListener("input", renderToolGroupNav);
+  primaryActionButton?.addEventListener("click", () => {
+    const mappedId = primaryActionByPanel[currentPanelId];
+    const primary = mappedId ? $(`#${mappedId}`) : activePanel()?.querySelector(".primary-button:not(#globalExportButton)");
+    if (!primary || primary.disabled) {
+      setStatus("当前工具还没有可执行的主操作。");
+      return;
+    }
+    primary.click();
   });
-
-  windowElement.addEventListener(
-    "wheel",
-    (event) => {
-      event.preventDefault();
-      wheelDelta += event.deltaY;
-      const threshold = 36;
-      if (Math.abs(wheelDelta) < threshold) return;
-      const direction = wheelDelta > 0 ? 1 : -1;
-      wheelDelta = 0;
-      stageTool(visualIndex + direction);
-      settleTool();
-    },
-    { passive: false },
-  );
-
-  windowElement.addEventListener("pointerdown", (event) => {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    const targetButton = event.target.closest(".tab-button");
-    if (targetButton !== buttons[activeIndex]) return;
-    window.clearTimeout(settleTimer);
-    isDragging = true;
-    dragLastY = event.clientY;
-    dragOffset = 0;
-    visualIndex = activeIndex;
-    suppressClick = false;
-    windowElement.classList.add("is-dragging");
-    windowElement.setPointerCapture(event.pointerId);
-  });
-
-  windowElement.addEventListener("pointermove", (event) => {
-    if (!isDragging) return;
-    dragOffset += event.clientY - dragLastY;
-    dragLastY = event.clientY;
-    if (Math.abs(dragOffset) > 4) {
-      suppressClick = true;
-    }
-    while (dragOffset > slotStep / 2) {
-      visualIndex = normalizeIndex(visualIndex - 1);
-      dragOffset -= slotStep;
-    }
-    while (dragOffset < -slotStep / 2) {
-      visualIndex = normalizeIndex(visualIndex + 1);
-      dragOffset += slotStep;
-    }
-    windowElement.classList.add("is-rolling");
-    layoutWheel();
-  });
-
-  const stopDrag = (event) => {
-    if (!isDragging) return;
-    isDragging = false;
-    if (windowElement.hasPointerCapture(event.pointerId)) {
-      windowElement.releasePointerCapture(event.pointerId);
-    }
-    windowElement.classList.remove("is-dragging");
-    if (suppressClick || visualIndex !== activeIndex) {
-      activateTool(visualIndex, true, !showingOverview);
-    } else {
-      dragOffset = 0;
-      layoutWheel();
-    }
-    window.setTimeout(() => {
-      suppressClick = false;
-    }, 0);
-  };
-
-  windowElement.addEventListener("pointerup", stopDrag);
-  windowElement.addEventListener("pointercancel", stopDrag);
-  $("#enterToolButton").addEventListener("click", enterTool);
-  $("#toolDrawerOpen").addEventListener("click", openToolDrawer);
-  $("#toolDrawerClose").addEventListener("click", closeToolDrawer);
-  document.querySelector("[data-tool-drawer-close]").addEventListener("click", closeToolDrawer);
+  helpButton?.addEventListener("click", () => setHelpVisible(!workspace?.classList.contains("show-help")));
+  $("#toolDrawerOpen")?.addEventListener("click", openToolDrawer);
+  $("#toolDrawerClose")?.addEventListener("click", closeToolDrawer);
+  document.querySelector("[data-tool-drawer-close]")?.addEventListener("click", closeToolDrawer);
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && toolDrawer.classList.contains("is-open")) {
-      closeToolDrawer();
-    }
+    if (event.key === "Escape" && toolDrawer?.classList.contains("is-open")) closeToolDrawer();
   });
-  document.querySelectorAll(".back-to-overview").forEach((button) => {
-    button.addEventListener("click", showOverview);
+  document.querySelectorAll(".help-toggle").forEach((button) => {
+    button.textContent = "帮助";
+    button.addEventListener("click", () => setHelpVisible(!workspace?.classList.contains("show-help")));
   });
-  window.addEventListener("resize", () => activateTool(activeIndex, false, !showingOverview));
-  activateTool(activeIndex, false);
+  document.addEventListener("input", updatePrimaryAction, true);
+  document.addEventListener("change", updatePrimaryAction, true);
+  document.addEventListener("gameassetforge:tool-state-changed", updatePrimaryAction);
+  activateTool(activeIndex);
+  setHelpVisible(false);
 }
 
 function setupTheme() {
-  const savedTheme = localStorage.getItem("gameAssetForgeTheme") || "dark";
+  const savedTheme = localStorage.getItem("gameAssetForgeTheme") || "light";
   const applyTheme = (theme) => {
     document.documentElement.dataset.theme = theme;
     const nextLabel = theme === "light" ? "切换到暗色模式" : "切换到亮色模式";

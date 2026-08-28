@@ -9,6 +9,7 @@ const { createMcpExpressApp } = require("@modelcontextprotocol/sdk/server/expres
 const { isInitializeRequest } = require("@modelcontextprotocol/sdk/types.js");
 const JSZip = require("jszip");
 const z = require("zod/v4");
+const { registerImageSpecTools } = require("./tools/imagespec");
 
 const host = process.env.MCP_HOST || process.env.HOST || "127.0.0.1";
 const port = Number(process.env.MCP_PORT || 5181);
@@ -23,6 +24,7 @@ function createServer() {
 
   registerTools(server);
   registerExtendedTools(server);
+  registerImageSpecTools(server);
   return server;
 }
 
@@ -374,6 +376,7 @@ function registerExtendedTools(server) {
       );
     },
   );
+
 }
 
 function textResult(data) {
@@ -458,6 +461,11 @@ async function callApiMultipart(endpoint, fields, fileFields) {
 
 function decodeMetadata(header) {
   if (!header) return null;
+  try {
+    return JSON.parse(header);
+  } catch {
+    // Older endpoints may base64-encode this header.
+  }
   try {
     return JSON.parse(Buffer.from(header, "base64").toString("utf8"));
   } catch {

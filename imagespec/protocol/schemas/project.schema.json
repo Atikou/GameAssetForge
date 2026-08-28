@@ -1,0 +1,337 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gameassetforge.local/imagespec/project.schema.json",
+  "title": "ImageSpec ProjectSpec 2.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "projectId",
+    "name",
+    "metadata",
+    "canvas",
+    "designSystem",
+    "assetGraph",
+    "regions",
+    "operationHistory",
+    "exportPresets",
+    "validationRules",
+    "revision"
+  ],
+  "properties": {
+    "$schema": { "const": "https://gameassetforge.local/imagespec/project.schema.json" },
+    "schemaVersion": { "const": "2.0" },
+    "projectId": { "$ref": "common.schema.json#/$defs/stableId" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "metadata": { "$ref": "#/$defs/metadata" },
+    "canvas": { "$ref": "#/$defs/canvas" },
+    "designSystem": { "$ref": "#/$defs/designSystem" },
+    "assetGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/assetNode" }
+        }
+      }
+    },
+    "regions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/regionSpec" }
+    },
+    "operationHistory": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/historyEntry" }
+    },
+    "exportPresets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/exportPreset" }
+    },
+    "validationRules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/validationRule" }
+    },
+    "revision": { "$ref": "common.schema.json#/$defs/revision" }
+  },
+  "$defs": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["createdAt", "updatedAt"],
+      "properties": {
+        "createdAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "description": { "type": "string" },
+        "author": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "legacy": { "type": "object" }
+      }
+    },
+    "canvas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "colorSpace", "alphaMode"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "colorSpace": { "const": "srgb" },
+        "alphaMode": { "enum": ["straight", "opaque"] },
+        "background": { "type": ["string", "null"] },
+        "orientation": { "enum": ["portrait", "landscape", "square", "free"] }
+      }
+    },
+    "designSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["styleDescription", "palette", "references", "safeAreas", "hitAreas", "forbiddenContent"],
+      "properties": {
+        "styleDescription": { "type": "string" },
+        "palette": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^#[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?$" },
+          "uniqueItems": true
+        },
+        "lighting": { "type": "string" },
+        "camera": { "type": "string" },
+        "perspective": { "type": "string" },
+        "compositionFocus": { "type": "string" },
+        "safeAreas": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/bounds" } },
+        "hitAreas": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/bounds" } },
+        "forbiddenContent": { "type": "array", "items": { "type": "string" } },
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "path", "purpose"],
+            "properties": {
+              "id": { "$ref": "common.schema.json#/$defs/stableId" },
+              "path": { "$ref": "common.schema.json#/$defs/relativePath" },
+              "purpose": { "enum": ["style", "layout", "character", "palette", "immutableSource"] },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "assetNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "type",
+        "parentId",
+        "bounds",
+        "transform",
+        "zIndex",
+        "source",
+        "masks",
+        "generationRule",
+        "editPolicy",
+        "exportPolicy",
+        "state"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/stableId" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "type": {
+          "enum": ["atomic", "composite", "nineSlice", "text", "progress", "background", "effect", "baked", "reconstruct", "legacyFlattened"]
+        },
+        "parentId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/stableId" },
+            { "type": "null" }
+          ]
+        },
+        "bounds": { "$ref": "common.schema.json#/$defs/bounds" },
+        "transform": { "$ref": "#/$defs/transform" },
+        "zIndex": { "type": "integer" },
+        "source": { "$ref": "#/$defs/assetSource" },
+        "masks": { "$ref": "#/$defs/masks" },
+        "generationRule": { "$ref": "#/$defs/generationRule" },
+        "editPolicy": { "$ref": "#/$defs/editPolicy" },
+        "exportPolicy": { "$ref": "#/$defs/exportPolicy" },
+        "state": {
+          "enum": ["draft", "planned", "needs_confirmation", "approved", "executing", "rendered", "validated", "exportable", "ambiguous", "blocked", "failed", "stale", "rejected"]
+        },
+        "tags": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "legacy": { "type": "object" }
+      }
+    },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "scaleX", "scaleY", "rotation", "anchor"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "scaleX": { "type": "number", "not": { "const": 0 } },
+        "scaleY": { "type": "number", "not": { "const": 0 } },
+        "rotation": { "type": "number" },
+        "anchor": { "$ref": "common.schema.json#/$defs/normalizedPoint" }
+      }
+    },
+    "assetSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["file", "generated", "composite", "text", "legacyFlattened", "missing"] },
+        "path": { "$ref": "common.schema.json#/$defs/relativePath" },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "mimeType": { "type": "string" },
+        "text": { "type": "string" },
+        "generator": { "type": "string" },
+        "provenanceRef": { "$ref": "common.schema.json#/$defs/relativePath" }
+      }
+    },
+    "masks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "visible": { "$ref": "common.schema.json#/$defs/relativePath" },
+        "full": { "$ref": "common.schema.json#/$defs/relativePath" },
+        "protected": { "$ref": "common.schema.json#/$defs/relativePath" },
+        "missing": { "$ref": "common.schema.json#/$defs/relativePath" }
+      }
+    },
+    "generationRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt", "negativePrompt", "referenceIds", "mustBeSeparate"],
+      "properties": {
+        "adapter": { "type": ["string", "null"] },
+        "prompt": { "type": "string" },
+        "negativePrompt": { "type": "string" },
+        "referenceIds": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/stableId" }, "uniqueItems": true },
+        "mustBeSeparate": { "type": "boolean" },
+        "parameters": { "type": "object" }
+      }
+    },
+    "editPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowedOperations", "protectedProperties", "preserveOutside", "requiresApproval"],
+      "properties": {
+        "allowedOperations": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "protectedProperties": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "preserveOutside": { "type": "boolean" },
+        "requiresApproval": { "type": "boolean" }
+      }
+    },
+    "exportPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "fileName", "format", "pivot", "padding", "scales", "trimTransparent"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "format": { "enum": ["png", "webp", "jpg"] },
+        "pivot": { "$ref": "common.schema.json#/$defs/normalizedPoint" },
+        "padding": { "type": "integer", "minimum": 0, "maximum": 4096 },
+        "scales": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0, "maximum": 16 }, "minItems": 1, "uniqueItems": true },
+        "trimTransparent": { "type": "boolean" },
+        "nineSlice": {
+          "oneOf": [
+            { "$ref": "#/$defs/nineSlice" },
+            { "type": "null" }
+          ]
+        },
+        "atlasGroup": { "type": ["string", "null"] },
+        "preserveTransparentPadding": { "type": "boolean" }
+      }
+    },
+    "nineSlice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["left", "right", "top", "bottom"],
+      "properties": {
+        "left": { "type": "integer", "minimum": 0 },
+        "right": { "type": "integer", "minimum": 0 },
+        "top": { "type": "integer", "minimum": 0 },
+        "bottom": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "regionSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "geometry", "masks", "associatedAssetIds"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/stableId" },
+        "name": { "type": "string", "minLength": 1 },
+        "geometry": { "$ref": "#/$defs/geometry" },
+        "masks": { "$ref": "#/$defs/masks" },
+        "associatedAssetIds": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/stableId" }, "uniqueItems": true },
+        "instruction": { "type": "string" },
+        "acceptance": { "type": "string" }
+      }
+    },
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "bounds", "rotation"],
+      "properties": {
+        "type": { "enum": ["rect", "ellipse", "polygon", "brush"] },
+        "bounds": { "$ref": "common.schema.json#/$defs/bounds" },
+        "rotation": { "type": "number" },
+        "points": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/point" }, "minItems": 2 },
+        "brushSize": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "historyEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planId", "receiptId", "status", "oldRevision", "newRevision", "at"],
+      "properties": {
+        "planId": { "$ref": "common.schema.json#/$defs/stableId" },
+        "receiptId": { "$ref": "common.schema.json#/$defs/stableId" },
+        "status": { "enum": ["succeeded", "failed", "blocked", "stale", "rejected"] },
+        "oldRevision": { "$ref": "common.schema.json#/$defs/revision" },
+        "newRevision": { "$ref": "common.schema.json#/$defs/revision" },
+        "at": { "$ref": "common.schema.json#/$defs/timestamp" }
+      }
+    },
+    "exportPreset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "engine", "outputDir", "format", "scales", "atlas", "options"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/stableId" },
+        "name": { "type": "string", "minLength": 1 },
+        "engine": { "enum": ["generic", "unity", "laya", "fgui", "cocos", "godot", "pixi"] },
+        "outputDir": { "$ref": "common.schema.json#/$defs/relativePath" },
+        "format": { "enum": ["png", "webp", "jpg"] },
+        "scales": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0, "maximum": 16 }, "minItems": 1, "uniqueItems": true },
+        "atlas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "maxSize", "padding", "extrude", "powerOfTwo"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "maxSize": { "type": "integer", "minimum": 64, "maximum": 16384 },
+            "padding": { "type": "integer", "minimum": 0, "maximum": 256 },
+            "extrude": { "type": "integer", "minimum": 0, "maximum": 32 },
+            "powerOfTwo": { "type": "boolean" }
+          }
+        },
+        "options": { "type": "object" }
+      }
+    },
+    "validationRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "enabled", "severity", "parameters"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/stableId" },
+        "type": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean" },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "parameters": { "type": "object" }
+      }
+    }
+  }
+}

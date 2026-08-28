@@ -7,8 +7,9 @@ const { registerMediaRoutes } = require("./media.routes");
 const { registerQualityRoutes } = require("./quality.routes");
 const { registerUnityRoutes } = require("./unity.routes");
 const { registerRankingRoutes } = require("./rankings.routes");
+const { registerImageSpecRoutes } = require("./imagespec.routes");
 
-function registerRoutes(app, upload) {
+function registerRoutes(app, upload, options = {}) {
   registerHealthRoutes(app);
   registerImageRoutes(app, upload);
   registerAtlasRoutes(app, upload);
@@ -18,6 +19,7 @@ function registerRoutes(app, upload) {
   registerQualityRoutes(app, upload);
   registerUnityRoutes(app, upload);
   registerRankingRoutes(app);
+  registerImageSpecRoutes(app, options);
 }
 
 module.exports = { registerRoutes };

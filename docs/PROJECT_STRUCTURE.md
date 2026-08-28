@@ -6,7 +6,10 @@ GameAssetForge 按“启动入口 / 路由 / 工具实现 / 公共库 / 外部�
 
 ```text
 server/
-  index.js              # API 启动入口，只负责 Express、静态文件和错误处理
+  index.js              # API 启动入口，只负责监听端口
+  app.js                # 可测试的 Express app、静态文件、兼容上传与错误处理
+  imagespec/
+    access.js           # ImageSpec HTTP 工程根目录白名单
   lib/
     common.js           # 参数解析、文件名、颜色、通用数值工具
     http.js             # 上传文件校验和 PNG / ZIP / 二进制响应
@@ -21,6 +24,7 @@ server/
     quality.routes.js   # 素材质检接口
     unity.routes.js     # Unity APK 扫描、提取和复原接口
     rankings.routes.js  # 手游排行榜抓取接口
+    imagespec.routes.js # ImageSpec Core 的薄 HTTP 适配层
   tools/
     image.js            # 图片工具兼容入口，统一导出 image/ 下的功能
     image/
@@ -38,6 +42,24 @@ server/
     text-asset-postprocess.js # 文本资产、JSON/关卡数据后处理
     unity-adapters/     # 内置 Unity 工具链检测和命令适配器
 ```
+
+## ImageSpec 领域层
+
+```text
+imagespec/
+  protocol/             # JSON Schema、稳定 ID、哈希、工厂和语义校验
+  core/                 # 工程仓库、锁、原子事务、OperationPlan 执行和 Receipt
+  runner/               # 内置能力 Registry、command/HTTP 外部 Runner 适配器
+  validator/            # 文件、alpha、边缘、mask、九宫格和变更范围验证
+  builder/              # 多倍率构建、atlas、引擎 manifest/适配产物和 ZIP
+  cli/                  # 结构化 JSON CLI
+mcp/tools/imagespec.js  # 共享 Core 的薄 MCP 工具
+src/imagespec-studio.js # Studio 交互模块
+src/imagespec-studio.css
+skills/imagespec-agent/ # Agent 的 ImageSpec 工作流 Skill
+```
+
+`*.project.imagespec` 是权威数据源。HTTP、MCP、CLI 和 Studio 共享同一 Core；路由和工具包装层不复制业务逻辑。设计决策见 `docs/architecture/IMAGESPEC_ADR_001.md`。
 
 ## 内置 Unity 工具链
 
@@ -62,6 +84,7 @@ Unity APK 面板会先调用 `GET /api/unity/toolchain` 检测工具链。快速
 4. 在 `server/routes/index.js` 注册路由模块。
 5. 在 `scripts/smoke-check.js` 补新增 DOM id、API route、工具导出或 MCP tool 的检查项。
 6. 如果工具会出现在 MCP 中，再同步更新 `mcp/server.js` 和 `docs/MCP.md`。
+7. ImageSpec 功能必须先进入 `imagespec/` 领域层，再由 HTTP/MCP/CLI/Studio 做薄适配；不要直接修改派生的 build、receipt 或 revision hash。
 
 ## 架构关注点
 

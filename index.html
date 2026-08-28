@@ -3,18 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GameAssetForge 游戏常用工具</title>
+    <meta name="theme-color" content="#17161b" />
+    <meta name="description" content="GameAssetForge 本地游戏素材处理与检验工作台" />
+    <title>GameAssetForge · 本地素材工作室</title>
     <link rel="stylesheet" href="src/styles.css" />
+    <link rel="stylesheet" href="src/imagespec-studio.css" />
   </head>
   <body>
-    <header class="app-topbar">
-      <a class="brand" href="#">
+    <header class="app-commandbar">
+      <a class="brand" href="#" aria-label="GameAssetForge 首页">
+        <span class="forge-symbol" aria-hidden="true">
+          <svg viewBox="0 0 40 40">
+            <path d="M7 7h11v5H12v6H7V7Zm15 0h11v11h-5v-6h-6V7ZM7 22h5v6h6v5H7V22Zm21 0h5v11H22v-5h6v-6Z"></path>
+            <path class="forge-symbol-core" d="m15 15 10 0 0 10-10 0z"></path>
+          </svg>
+        </span>
         <span>
           <strong>GameAssetForge</strong>
-          <small>游戏常用工具</small>
+          <small>LOCAL ASSET STUDIO</small>
         </span>
       </a>
-      <div class="topbar-actions">
+      <div class="command-context" aria-live="polite">
+        <span id="commandToolTag">透明 PNG 处理</span>
+        <strong id="commandToolName">抠背景</strong>
+        <small id="commandFileState">未导入素材</small>
+      </div>
+      <div class="command-actions">
+        <button id="globalExportButton" class="primary-button" type="button">执行主操作</button>
+        <button id="helpButton" type="button">帮助</button>
         <button id="rankingOpen" class="ranking-open" type="button">排行榜</button>
         <button id="themeToggle" class="theme-toggle" type="button" aria-label="切换到亮色模式" title="切换主题">
           <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
@@ -112,8 +128,8 @@
       <aside class="tool-rail" aria-label="工具列表">
         <div class="rail-heading">
           <div>
-            <span>TOOLS</span>
-            <h1>选择工具</h1>
+            <span>MODULE LIBRARY</span>
+            <h1>处理工具</h1>
           </div>
           <button id="toolDrawerOpen" class="tool-drawer-open" type="button" aria-label="展开全部工具">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -122,114 +138,17 @@
           </button>
         </div>
 
-        <div class="tool-wheel">
-          <div class="wheel-window">
-            <nav class="tool-tabs wheel-track" aria-label="工具切换">
-              <button class="tab-button active" type="button" data-panel="chromaPanel">
-                <span class="tab-button-content">
-                  <span>抠背景</span>
-                  <small>图片透明 PNG</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="resizePanel">
-                <span class="tab-button-content">
-                  <span>改尺寸</span>
-                  <small>宽高 / 比例 / 长边</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="interpolatePanel">
-                <span class="tab-button-content">
-                  <span>图片插帧</span>
-                  <small>两帧生成中间帧</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="videoPanel">
-                <span class="tab-button-content">
-                  <span>视频抽帧</span>
-                  <small>扣背景 / 帧动画 / 图集</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="batchPanel">
-                <span class="tab-button-content">
-                  <span>批量队列</span>
-                  <small>多图处理 / 批量导出</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="trimPanel">
-                <span class="tab-button-content">
-                  <span>裁透明边</span>
-                  <small>去空白 / offset 数据</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="pixelScalePanel">
-                <span class="tab-button-content">
-                  <span>像素缩放</span>
-                  <small>最近邻 / 整数倍</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="truePixelPanel">
-                <span class="tab-button-content">
-                  <span>真像素化</span>
-                  <small>AI 伪像素 / 硬边重采样</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="pixelEditorPanel">
-                <span class="tab-button-content">
-                  <span>像素编辑</span>
-                  <small>画笔 / 橡皮 / 网格</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="sequencePanel">
-                <span class="tab-button-content">
-                  <span>序列重命名</span>
-                  <small>排序 / 补零 / 导出</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="atlasSlicePanel">
-                <span class="tab-button-content">
-                  <span>图集切割</span>
-                  <small>自动网格 / 手动调整</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="convertPanel">
-                <span class="tab-button-content">
-                  <span>格式转换</span>
-                  <small>PNG / WebP / JPG / AVIF</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="atlasPackPanel">
-                <span class="tab-button-content">
-                  <span>图集打包</span>
-                  <small>Padding / Extrude / 引擎导出</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="unityApkPanel">
-                <span class="tab-button-content">
-                  <span>Unity APK</span>
-                  <small>工程还原 / 资源提取</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="spriteFxPanel">
-                <span class="tab-button-content">
-                  <span>Sprite 增强</span>
-                  <small>边缘 / 描边 / 调色 / 法线</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="pipelinePanel">
-                <span class="tab-button-content">
-                  <span>流水线工具</span>
-                  <small>动图 / 九宫格 / Tile / 质检</small>
-                </span>
-              </button>
-              <button class="tab-button" type="button" data-panel="audioPanel">
-                <span class="tab-button-content">
-                  <span>音频工具</span>
-                  <small>转码 / 标准化</small>
-                </span>
-              </button>
-            </nav>
-          </div>
-        </div>
+        <label class="tool-search">
+          <span>快速查找</span>
+          <input id="toolSearch" type="search" placeholder="搜索 18 个独立模块" autocomplete="off" />
+        </label>
+
+        <section class="recent-tools" aria-label="最近使用">
+          <div class="rail-section-title">最近使用</div>
+          <div id="recentToolList" class="recent-tool-list"></div>
+        </section>
+
+        <nav id="toolGroupNav" class="tool-group-nav" aria-label="全部工具"></nav>
 
         <div class="rail-note">
           <strong id="currentToolName">抠背景</strong>
@@ -238,35 +157,6 @@
       </aside>
 
       <section class="workspace">
-        <section class="tool-overview active" id="toolOverview">
-          <div class="overview-card">
-            <div>
-              <span class="overview-kicker">当前工具</span>
-              <h2 id="overviewTitle">抠背景</h2>
-              <p id="overviewDesc">处理绿幕、品红底、蓝底或自定义纯色背景。</p>
-            </div>
-            <button id="enterToolButton" class="primary-button" type="button">进入工具</button>
-          </div>
-
-          <div class="overview-grid">
-            <article>
-              <span>用途</span>
-              <strong id="overviewUse">透明 PNG 处理</strong>
-              <p id="overviewUseDesc">用于快速扣除纯色背景，输出可直接进入引擎或图集流程的透明素材。</p>
-            </article>
-            <article>
-              <span>输入</span>
-              <strong id="overviewInput">图片文件</strong>
-              <p id="overviewInputDesc">选择本地 PNG、JPG、WebP 等浏览器可读取的图片。</p>
-            </article>
-            <article>
-              <span>输出</span>
-              <strong id="overviewOutput">PNG</strong>
-              <p id="overviewOutputDesc">保留透明通道，适合 UI、特效、道具图和序列帧资源。</p>
-            </article>
-          </div>
-        </section>
-
         <section class="tool-panel" id="chromaPanel">
           <div class="panel-heading">
             <div>
@@ -275,7 +165,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">透明 PNG</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
 
@@ -387,7 +277,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">高清重采样</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
 
@@ -485,7 +375,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">轻量本地生成</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
 
@@ -574,7 +464,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">PNG 序列 / 图集</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
 
@@ -725,7 +615,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">批量 PNG</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
 
@@ -862,7 +752,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">Trim + Offset</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
 
@@ -924,7 +814,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">Nearest</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
 
@@ -973,7 +863,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">Pixelize</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
 
@@ -1043,7 +933,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">Pixel Editor</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
 
@@ -1115,7 +1005,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">Sequence</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
 
@@ -1172,7 +1062,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">Atlas Slice</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
 
@@ -1274,7 +1164,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">Convert</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
           <div class="workflow-layout">
@@ -1324,7 +1214,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">Atlas Pack</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
           <div class="workflow-layout">
@@ -1377,7 +1267,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">Unity APK</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
           <div class="workflow-layout wide-workflow">
@@ -1462,7 +1352,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">Sprite FX</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
           <div class="workflow-layout">
@@ -1527,7 +1417,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">Pipeline</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
           <div class="video-workspace">
@@ -1575,6 +1465,82 @@
           </div>
         </section>
 
+        <section class="tool-panel imagespec-panel" id="imagespecPanel">
+          <div class="panel-heading">
+            <div>
+              <h2>ImageSpec 图片规范</h2>
+              <p>导入图片、标记区域、组织图层并填写 AI 修改与切图规则，最后导出可继续编辑的需求包。</p>
+            </div>
+            <div class="panel-actions">
+              <span class="panel-tag">Image workflow</span>
+              <button class="help-toggle" type="button">帮助</button>
+            </div>
+          </div>
+
+          <div class="imagespec-module-shell">
+            <header class="imagespec-commandbar">
+              <label class="imagespec-title-field">
+                <span>图片规范</span>
+                <input id="imagespecProjectName" type="text" value="未命名图片规范" aria-label="图片规范名称" />
+              </label>
+              <div class="imagespec-command-actions">
+                <button id="imagespecNew" type="button">新建</button>
+                <label class="file-button imagespec-file-action"><input id="imagespecImageInput" type="file" accept="image/png,image/jpeg,image/webp" />导入图片</label>
+                <label class="file-button imagespec-file-action"><input id="imagespecProjectInput" type="file" accept=".json,.imagespec.json,application/json" />打开规范</label>
+                <button id="imagespecSaveProject" type="button">保存规范</button>
+                <button id="imagespecUndo" type="button" aria-label="撤销" title="撤销 (Ctrl+Z)">↶</button>
+                <button id="imagespecRedo" type="button" aria-label="重做" title="重做 (Ctrl+Y)">↷</button>
+                <label class="file-button imagespec-file-action"><input id="imagespecCompareInput" type="file" accept="image/png,image/jpeg,image/webp" />版本对比</label>
+                <button id="imagespecExportPackage" class="primary-button" type="button">导出需求包</button>
+              </div>
+            </header>
+
+            <div class="imagespec-workbench">
+              <nav class="imagespec-toolrail" aria-label="图片标注工具">
+                <button class="active" type="button" data-imagespec-tool="select" title="选择与移动 (V)"><b>↖</b><span>选择</span><kbd>V</kbd></button>
+                <button type="button" data-imagespec-tool="rect" title="矩形 (R)"><b>□</b><span>矩形</span><kbd>R</kbd></button>
+                <button type="button" data-imagespec-tool="ellipse" title="椭圆 (E)"><b>○</b><span>椭圆</span><kbd>E</kbd></button>
+                <button type="button" data-imagespec-tool="polygon" title="多边形 (P)"><b>⬠</b><span>多边形</span><kbd>P</kbd></button>
+                <button type="button" data-imagespec-tool="brush" title="画笔 (B)"><b>✎</b><span>画笔</span><kbd>B</kbd></button>
+                <button type="button" data-imagespec-tool="note" title="注释 (N)"><b>T</b><span>注释</span><kbd>N</kbd></button>
+                <span class="imagespec-tool-spacer"></span>
+                <button id="imagespecFit" type="button" title="适应画布"><b>⌗</b><span>适应</span></button>
+              </nav>
+
+              <section class="imagespec-stage-column">
+                <div class="imagespec-stagebar">
+                  <div><span class="imagespec-live-dot"></span><strong id="imagespecCanvasMeta">1600 × 900</strong><span id="imagespecRegionCount">0 个框选</span></div>
+                  <div class="imagespec-stage-actions">
+                    <span id="imagespecCompareControl" class="imagespec-compare-control hidden"><b>修改版</b><input id="imagespecCompareAmount" type="range" min="0" max="1" step="0.01" value="0.5" aria-label="版本对比分割位置" /><button id="imagespecEndCompare" type="button">结束</button></span>
+                    <span class="imagespec-zoom"><button id="imagespecZoomOut" type="button">−</button><button id="imagespecZoomReset" type="button">100%</button><button id="imagespecZoomIn" type="button">＋</button></span>
+                  </div>
+                </div>
+                <div class="imagespec-stage" id="imagespecStage">
+                  <canvas id="imagespecCanvas" width="960" height="640"></canvas>
+                  <div id="imagespecEmptyState" class="imagespec-empty-state">
+                    <span>IS</span><strong>先导入一张图片</strong><p>支持 PNG、JPG、WebP，也可以新建空白画布。</p>
+                    <label class="file-button"><input id="imagespecEmptyImageInput" type="file" accept="image/png,image/jpeg,image/webp" />选择图片</label>
+                  </div>
+                  <div id="imagespecStageHint" class="imagespec-stage-hint"><kbd>空格</kbd> 拖动画布 · <kbd>滚轮</kbd> 缩放 · <kbd>Delete</kbd> 删除区域</div>
+                </div>
+                <footer class="imagespec-statusbar">
+                  <span id="imagespecSelectionStatus">未选择区域</span>
+                  <span id="imagespecSaveState">等待导入图片</span>
+                </footer>
+              </section>
+
+              <aside class="imagespec-inspector">
+                <nav class="imagespec-side-tabs" aria-label="检查器模式">
+                  <button class="active" type="button" data-imagespec-side="region">区域</button>
+                  <button type="button" data-imagespec-side="layers">图层</button>
+                  <button type="button" data-imagespec-side="review">检查 <i id="imagespecIssueBadge">0</i></button>
+                </nav>
+                <div id="imagespecInspectorContent" class="imagespec-inspector-content"></div>
+              </aside>
+            </div>
+          </div>
+        </section>
+
         <section class="tool-panel" id="audioPanel">
           <div class="panel-heading">
             <div>
@@ -1583,7 +1549,7 @@
             </div>
             <div class="panel-actions">
               <span class="panel-tag">Audio</span>
-              <button class="back-to-overview" type="button">返回说明</button>
+              <button class="help-toggle" type="button">帮助</button>
             </div>
           </div>
           <div class="workflow-layout">
@@ -1614,8 +1580,8 @@
       <aside class="tool-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="toolDrawerTitle">
         <header class="tool-drawer-header">
           <div>
-            <span>TOOLS</span>
-            <h2 id="toolDrawerTitle">工具分组</h2>
+            <span>MODULE LIBRARY</span>
+            <h2 id="toolDrawerTitle">选择处理模块</h2>
           </div>
           <button id="toolDrawerClose" class="tool-drawer-close" type="button" aria-label="关闭全部工具">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1653,5 +1619,7 @@
     </template>
 
     <script src="src/app.js"></script>
+    <script src="src/imagespec-zip.js"></script>
+    <script src="src/imagespec-studio.js"></script>
   </body>
 </html>
